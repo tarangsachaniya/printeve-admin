@@ -36,16 +36,30 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [showHtml, setShowHtml] = useState(false)
+  const [htmlValue, setHtmlValue] = useState('')
 
   const editor = useEditor({
     extensions: [StarterKit],
     content: '',
+    immediatelyRender: false,
+    shouldRerenderOnTransaction: true,
     editorProps: {
       attributes: {
         class: 'prose prose-sm max-w-none min-h-[300px] px-4 py-3 focus:outline-none',
       },
     },
   })
+
+  function toggleHtml() {
+    if (!editor) return
+    if (!showHtml) {
+      setHtmlValue(editor.getHTML())
+    } else {
+      editor.commands.setContent(htmlValue)
+    }
+    setShowHtml(v => !v)
+  }
 
   const loadContent = useCallback(async () => {
     if (!editor) return
@@ -125,10 +139,20 @@ export default function SettingsPage() {
           <ToolbarButton onClick={() => editor?.chain().focus().redo().run()} disabled={!editor?.can().redo()}>
             ↪
           </ToolbarButton>
+          <div className="w-px h-5 bg-border mx-1" />
+          <ToolbarButton onClick={toggleHtml} active={showHtml} disabled={!editor}>
+            {'</>'}
+          </ToolbarButton>
         </div>
 
         {loading ? (
           <div className="px-4 py-8 text-center text-muted-foreground text-sm">Loading…</div>
+        ) : showHtml ? (
+          <textarea
+            value={htmlValue}
+            onChange={e => setHtmlValue(e.target.value)}
+            className="w-full min-h-[300px] px-4 py-3 font-mono text-xs resize-y focus:outline-none bg-transparent"
+          />
         ) : (
           <EditorContent editor={editor} />
         )}

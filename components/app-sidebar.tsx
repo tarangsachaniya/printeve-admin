@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
   Package, BarChart2, ShieldCheck, LogOut, Settings, Layers,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { logout, getCurrentUser } from '@/lib/auth'
+import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 
 const navItems = [
@@ -24,7 +25,12 @@ const navItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const user = getCurrentUser()
+  const [user, setUser] = useState<AdminUser | null>(null)
+
+  useEffect(() => {
+    setUser(getCurrentUser())
+  }, [])
+
   const isSuperAdmin = user?.role === 'super_admin'
 
   return (
@@ -49,6 +55,21 @@ export function AppSidebar() {
             {label}
           </Link>
         ))}
+
+        {isSuperAdmin && (
+          <Link
+            href="/admins"
+            className={cn(
+              'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              pathname === '/admins'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            <ShieldCheck className="h-4 w-4 shrink-0" />
+            Admins
+          </Link>
+        )}
 
         {isSuperAdmin && (
           <Link

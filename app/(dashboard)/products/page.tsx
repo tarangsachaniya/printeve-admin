@@ -98,11 +98,26 @@ export default function ProductsPage() {
   const [pendingSize, setPendingSize] = useState('')
 
   // Description editor
+  const [showDescHtml, setShowDescHtml] = useState(false)
+  const [descHtmlValue, setDescHtmlValue] = useState('')
+
   const descEditor = useEditor({
     extensions: [StarterKit],
     content: '',
+    immediatelyRender: false,
+    shouldRerenderOnTransaction: true,
     editorProps: { attributes: { class: 'prose prose-sm max-w-none min-h-[180px] px-4 py-3 focus:outline-none' } },
   })
+
+  function toggleDescHtml() {
+    if (!descEditor) return
+    if (!showDescHtml) {
+      setDescHtmlValue(descEditor.getHTML())
+    } else {
+      descEditor.commands.setContent(descHtmlValue)
+    }
+    setShowDescHtml(v => !v)
+  }
 
   // Media state
   const [images, setImages] = useState<string[]>([])
@@ -358,8 +373,18 @@ export default function ProductsPage() {
                   <div className="w-px h-5 bg-border mx-1" />
                   <ToolbarButton onClick={() => descEditor?.chain().focus().undo().run()} disabled={!descEditor?.can().undo()}>↩</ToolbarButton>
                   <ToolbarButton onClick={() => descEditor?.chain().focus().redo().run()} disabled={!descEditor?.can().redo()}>↪</ToolbarButton>
+                  <div className="w-px h-5 bg-border mx-1" />
+                  <ToolbarButton onClick={toggleDescHtml} active={showDescHtml} disabled={!descEditor}>{'</>'}</ToolbarButton>
                 </div>
-                <EditorContent editor={descEditor} />
+                {showDescHtml ? (
+                  <textarea
+                    value={descHtmlValue}
+                    onChange={e => setDescHtmlValue(e.target.value)}
+                    className="w-full min-h-[180px] px-4 py-3 font-mono text-xs resize-y focus:outline-none bg-transparent"
+                  />
+                ) : (
+                  <EditorContent editor={descEditor} />
+                )}
               </div>
             </section>
 

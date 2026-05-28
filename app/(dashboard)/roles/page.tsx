@@ -146,7 +146,7 @@ export default function RolesPage() {
                 onClick={() => selectRole(role)}
               >
                 <span className="text-sm font-medium">{role.name}</span>
-                {isSuperAdmin && !['admin', 'super_admin', 'customer', 'printer', 'rider'].includes(role.name) && (
+                {isSuperAdmin && !['admin', 'super_admin', 'customer', 'printer'].includes(role.name) && (
                   <Button
                     size="sm"
                     variant="ghost"

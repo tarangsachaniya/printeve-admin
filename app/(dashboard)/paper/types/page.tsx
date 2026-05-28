@@ -56,6 +56,19 @@ export default function PaperTypesPage() {
 
       <Card>
         <CardContent className="p-0">
+          <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20">
+            <Input
+              className="flex-1"
+              placeholder="e.g. Matte, Glossy, UV, Silk, Recycled"
+              value={newType}
+              onChange={e => setNewType(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), add())}
+            />
+            <Button size="sm" onClick={add} disabled={adding || !newType.trim()}>
+              <PlusIcon className="h-4 w-4 mr-1" /> Add
+            </Button>
+          </div>
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -83,19 +96,6 @@ export default function PaperTypesPage() {
               )}
             </TableBody>
           </Table>
-
-          <div className="flex items-center gap-2 px-4 py-3 border-t bg-muted/20">
-            <Input
-              className="flex-1"
-              placeholder="e.g. Matte, Glossy, UV, Silk, Recycled"
-              value={newType}
-              onChange={e => setNewType(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), add())}
-            />
-            <Button size="sm" onClick={add} disabled={adding || !newType.trim()}>
-              <PlusIcon className="h-4 w-4 mr-1" /> Add
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>
