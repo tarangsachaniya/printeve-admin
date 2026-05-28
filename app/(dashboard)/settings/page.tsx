@@ -120,10 +120,10 @@ export default function SettingsPage() {
           </ToolbarButton>
           <div className="w-px h-5 bg-border mx-1" />
           <ToolbarButton onClick={() => editor?.chain().focus().toggleBulletList().run()} active={editor?.isActive('bulletList')}>
-            • List
+            Bullet List
           </ToolbarButton>
           <ToolbarButton onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={editor?.isActive('orderedList')}>
-            1. List
+            Ordered List
           </ToolbarButton>
           <div className="w-px h-5 bg-border mx-1" />
           <ToolbarButton onClick={() => editor?.chain().focus().toggleBlockquote().run()} active={editor?.isActive('blockquote')}>
