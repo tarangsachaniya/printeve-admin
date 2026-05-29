@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { validatePassword } from '@/lib/password'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,29 +37,53 @@ export default function PrintersPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [pwError, setPwError] = useState('')
 
   function load() {
     setLoading(true)
     api.get<{ items: PrinterItem[] }>('/admin/printers')
       .then(res => setPrinters(res.items ?? []))
-      .catch(() => {})
+      .catch((err) => toast.error(err.message ?? 'Failed to load printers'))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
 
   async function handleApprove(id: string) {
-    await api.patch(`/admin/printers/${id}/approve`, {})
-    load()
+    try {
+      await api.patch(`/admin/printers/${id}/approve`, {})
+      toast.success('Printer approved')
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to approve printer')
+    }
   }
 
   async function handleSuspend(id: string) {
-    await api.patch(`/admin/printers/${id}/suspend`, {})
-    load()
+    try {
+      await api.patch(`/admin/printers/${id}/suspend`, {})
+      toast.success('Printer suspended')
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to suspend printer')
+    }
+  }
+
+  async function handleRevoke(id: string) {
+    try {
+      await api.patch(`/admin/printers/${id}/revoke`, {})
+      toast.success('Suspension revoked')
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to revoke suspension')
+    }
   }
 
   async function handleCreate() {
     if (!form.business_name || !form.email || !form.phone || !form.password) return
+    const pwErr = validatePassword(form.password)
+    if (pwErr) { setPwError(pwErr); return }
+    setPwError('')
     setSaving(true)
     try {
       await api.post('/admin/printers', {
@@ -66,9 +92,12 @@ export default function PrintersPage() {
         phone: form.phone,
         password: form.password,
       })
+      toast.success('Printer account created')
       setOpen(false)
       setForm(emptyForm)
       load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create printer')
     } finally {
       setSaving(false)
     }
@@ -87,7 +116,7 @@ export default function PrintersPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Printers</h1>
-        <Button onClick={() => { setForm(emptyForm); setOpen(true) }}>Add Printer</Button>
+        <Button onClick={() => { setForm(emptyForm); setPwError(''); setOpen(true) }}>Add Printer</Button>
       </div>
 
       {loading ? (
@@ -120,6 +149,9 @@ export default function PrintersPage() {
                     {p.status === 'active' && (
                       <Button size="sm" variant="destructive" onClick={() => handleSuspend(p.id)}>Suspend</Button>
                     )}
+                    {p.status === 'suspended' && (
+                      <Button size="sm" variant="outline" onClick={() => handleRevoke(p.id)}>Revoke Suspension</Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -134,7 +166,7 @@ export default function PrintersPage() {
       )}
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="!w-[420px] flex flex-col h-full p-0">
+        <SheetContent side="right" className="!w-[50vw] !max-w-none flex flex-col h-full p-0">
           <SheetHeader className="px-6 pt-5 pb-4 border-b shrink-0">
             <SheetTitle>Add Printer</SheetTitle>
             <p className="text-sm text-muted-foreground">
@@ -153,11 +185,12 @@ export default function PrintersPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Phone <span className="text-destructive">*</span></Label>
-              <Input value={form.phone} onChange={field('phone')} placeholder="+91 98765 43210" />
+              <Input value={form.phone} onChange={field('phone')} placeholder="9876543210" />
             </div>
             <div className="space-y-1.5">
               <Label>Password <span className="text-destructive">*</span></Label>
-              <Input type="password" value={form.password} onChange={field('password')} placeholder="Temporary password" />
+              <Input type="password" value={form.password} onChange={(e) => { setForm(f => ({ ...f, password: e.target.value })); setPwError('') }} placeholder="Min. 8 chars, uppercase, number, symbol" />
+              {pwError && <p className="text-xs text-destructive">{pwError}</p>}
             </div>
           </div>
 

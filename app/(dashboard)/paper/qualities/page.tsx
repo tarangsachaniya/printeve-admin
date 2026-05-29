@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { PlusIcon, Trash2Icon, ArrowLeftIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,7 +23,7 @@ export default function PaperQualitiesPage() {
   function load() {
     api.get<{ items: PaperQuality[] }>('/admin/paper/qualities')
       .then(r => setQualities(r.items ?? []))
-      .catch(() => {})
+      .catch((err) => toast.error(err.message ?? 'Failed to load GSM values'))
   }
 
   useEffect(() => { load() }, [])
@@ -35,12 +36,18 @@ export default function PaperQualitiesPage() {
       await api.post('/admin/paper/qualities', { gsm, label: newLabel.trim() || null })
       setNewGsm(''); setNewLabel('')
       load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add GSM value')
     } finally { setAdding(false) }
   }
 
   async function remove(id: string) {
-    await api.delete(`/admin/paper/qualities/${id}`)
-    load()
+    try {
+      await api.delete(`/admin/paper/qualities/${id}`)
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete GSM value')
+    }
   }
 
   return (

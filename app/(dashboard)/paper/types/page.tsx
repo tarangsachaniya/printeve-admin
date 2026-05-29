@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { PlusIcon, Trash2Icon, ArrowLeftIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,7 +22,7 @@ export default function PaperTypesPage() {
   function load() {
     api.get<{ items: PaperType[] }>('/admin/paper/types')
       .then(r => setTypes(r.items ?? []))
-      .catch(() => {})
+      .catch((err) => toast.error(err.message ?? 'Failed to load paper types'))
   }
 
   useEffect(() => { load() }, [])
@@ -34,12 +35,18 @@ export default function PaperTypesPage() {
       await api.post('/admin/paper/types', { name: val, sort_order: types.length })
       setNewType('')
       load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add paper type')
     } finally { setAdding(false) }
   }
 
   async function remove(id: string) {
-    await api.delete(`/admin/paper/types/${id}`)
-    load()
+    try {
+      await api.delete(`/admin/paper/types/${id}`)
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete paper type')
+    }
   }
 
   return (

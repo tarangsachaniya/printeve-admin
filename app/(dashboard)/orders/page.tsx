@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,15 +33,19 @@ export default function OrdersPage() {
     setLoading(true)
     api.get<{ items: Order[]; total: number }>(`/admin/orders?page=${p}&limit=${limit}`)
       .then((res) => { setOrders(res.items); setTotal(res.total) })
-      .catch(() => {})
+      .catch((err) => toast.error(err.message ?? 'Failed to load orders'))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => { load(page) }, [page])
 
   async function handleStatusChange(id: string, status: string) {
-    await api.patch(`/admin/orders/${id}/status`, { status })
-    load(page)
+    try {
+      await api.patch(`/admin/orders/${id}/status`, { status })
+      load(page)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update order status')
+    }
   }
 
   return (

@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { validatePassword } from '@/lib/password'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,39 +35,51 @@ export default function AdminsPage() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [pwError, setPwError] = useState('')
 
   function load() {
     setLoading(true)
     api.get<{ data: Admin[] }>('/admin/admins')
       .then((res) => setAdmins(res.data ?? []))
-      .catch(() => {})
+      .catch((err) => toast.error(err.message ?? 'Failed to load admins'))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
 
   async function handleCreate() {
+    const pwErr = validatePassword(form.password)
+    if (pwErr) { setPwError(pwErr); return }
+    setPwError('')
     setSaving(true)
     try {
       await api.post('/admin/admins', form)
+      toast.success('Admin created')
       setOpen(false)
       setForm(emptyForm)
       load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create admin')
     } finally {
       setSaving(false)
     }
   }
 
   async function handleRevoke(id: string) {
-    await api.delete(`/admin/admins/${id}`)
-    load()
+    try {
+      await api.delete(`/admin/admins/${id}`)
+      toast.success('Admin access revoked')
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to revoke admin')
+    }
   }
 
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Admins</h1>
-        <Button onClick={() => { setForm(emptyForm); setOpen(true) }}>Add Admin</Button>
+        <Button onClick={() => { setForm(emptyForm); setPwError(''); setOpen(true) }}>Add Admin</Button>
       </div>
 
       {loading ? (
@@ -140,7 +154,8 @@ export default function AdminsPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Password</Label>
-              <Input type="password" value={form.password} onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} />
+              <Input type="password" value={form.password} onChange={(e) => { setForm(f => ({ ...f, password: e.target.value })); setPwError('') }} />
+              {pwError && <p className="text-xs text-destructive">{pwError}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Role</Label>

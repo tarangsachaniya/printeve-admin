@@ -3,6 +3,7 @@
 import { useEffect, useCallback, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 
@@ -85,7 +86,10 @@ export default function SettingsPage() {
     try {
       await api.post('/admin/settings', { key: CONTENT_KEY, value: editor.getHTML() })
       setSaved(true)
+      toast.success('Settings saved')
       setTimeout(() => setSaved(false), 2000)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save settings')
     } finally {
       setSaving(false)
     }

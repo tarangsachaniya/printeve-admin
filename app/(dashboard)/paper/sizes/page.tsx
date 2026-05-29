@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { PlusIcon, Trash2Icon, ArrowLeftIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,7 +58,7 @@ export default function PaperSizesPage() {
   function load() {
     api.get<{ items: PaperSize[] }>('/admin/paper/sizes')
       .then(r => setSizes(r.items ?? []))
-      .catch(() => {})
+      .catch((err) => toast.error(err.message ?? 'Failed to load sizes'))
   }
 
   useEffect(() => { load() }, [])
@@ -70,6 +71,8 @@ export default function PaperSizesPage() {
       await api.post('/admin/paper/sizes', { name: val, sort_order: sizes.length })
       setNewName('')
       load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add size')
     } finally { setAdding(false) }
   }
 
@@ -83,12 +86,18 @@ export default function PaperSizesPage() {
       await api.post('/admin/paper/sizes', { name, width: w, height: h, unit: custUnit, sort_order: sizes.length })
       setCustWidth(''); setCustHeight(''); setCustName('')
       load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add size')
     } finally { setAdding(false) }
   }
 
   async function remove(id: string) {
-    await api.delete(`/admin/paper/sizes/${id}`)
-    load()
+    try {
+      await api.delete(`/admin/paper/sizes/${id}`)
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete size')
+    }
   }
 
   function dimLabel(s: PaperSize) {

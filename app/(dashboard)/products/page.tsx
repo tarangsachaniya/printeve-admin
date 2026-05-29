@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { PlusIcon, VideoIcon, XIcon, UploadIcon } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +15,10 @@ import {
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter,
 } from '@/components/ui/sheet'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import Link from 'next/link'
 
 function ToolbarButton({
   onClick, active, disabled, children,
@@ -57,14 +62,29 @@ interface PaperSize {
   sort_order: number
 }
 
+interface PaperQualityOption {
+  id: string
+  gsm: number
+  label: string | null
+}
+
+interface PaperTypeOption {
+  id: string
+  name: string
+  sort_order: number
+}
+
 type Quality = { gsm: string; price: string }
-type PaperType = { type: string; price: string }
+type PaperTypeEntry = { type: string; price: string }
 type QtyTier = { min_qty: string; max_qty: string; unit_price: string }
 
 const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? ''
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? ''
 
 async function uploadToCloudinary(file: File, type: 'image' | 'video'): Promise<string> {
+  if (!CLOUD_NAME || !UPLOAD_PRESET)
+    throw new Error('Cloudinary is not configured (check NEXT_PUBLIC_CLOUDINARY_* env vars)')
+
   const fd = new FormData()
   fd.append('file', file)
   fd.append('upload_preset', UPLOAD_PRESET)
@@ -73,14 +93,16 @@ async function uploadToCloudinary(file: File, type: 'image' | 'video'): Promise<
     method: 'POST',
     body: fd,
   })
-  if (!res.ok) throw new Error('Cloudinary upload failed')
-  const data = await res.json() as { secure_url: string }
-  return data.secure_url
+  const data = await res.json() as { secure_url?: string; error?: { message: string } }
+  if (!res.ok) throw new Error(data.error?.message ?? 'Cloudinary upload failed')
+  return data.secure_url!
 }
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [paperSizes, setPaperSizes] = useState<PaperSize[]>([])
+  const [paperQualityOptions, setPaperQualityOptions] = useState<PaperQualityOption[]>([])
+  const [paperTypeOptions, setPaperTypeOptions] = useState<PaperTypeOption[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
@@ -91,7 +113,7 @@ export default function ProductsPage() {
   const [basePrice, setBasePrice] = useState('')
   const [paperSizesSel, setPaperSizesSel] = useState<string[]>([])
   const [qualities, setQualities] = useState<Quality[]>([])
-  const [paperTypes, setPaperTypes] = useState<PaperType[]>([])
+  const [paperTypes, setPaperTypes] = useState<PaperTypeEntry[]>([])
   const [qtyTiers, setQtyTiers] = useState<QtyTier[]>([])
   const [pendingGsm, setPendingGsm] = useState('')
   const [pendingType, setPendingType] = useState('')
@@ -141,16 +163,36 @@ export default function ProductsPage() {
     setLoading(true)
     api.get<{ items: Product[] }>('/admin/products')
       .then(res => setProducts(res.items ?? []))
-      .catch(() => {})
+      .catch((err) => toast.error(err.message ?? 'Failed to load products'))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => {
     load()
-    api.get<{ items: PaperSize[] }>('/admin/paper/sizes')
-      .then(res => setPaperSizes(res.items ?? []))
+    Promise.all([
+      api.get<{ items: PaperSize[] }>('/admin/paper/sizes'),
+      api.get<{ items: PaperQualityOption[] }>('/admin/paper/qualities'),
+      api.get<{ items: PaperTypeOption[] }>('/admin/paper/types'),
+    ])
+      .then(([sizes, qualities, types]) => {
+        setPaperSizes(sizes.items ?? [])
+        setPaperQualityOptions(qualities.items ?? [])
+        setPaperTypeOptions(types.items ?? [])
+      })
       .catch(() => {})
   }, [])
+
+  function qualityDisplay(gsm: string) {
+    const opt = paperQualityOptions.find(q => String(q.gsm) === gsm)
+    return opt?.label ? `${gsm} gsm — ${opt.label}` : `${gsm} gsm`
+  }
+
+  const availableQualities = paperQualityOptions.filter(
+    q => !qualities.some(x => x.gsm === String(q.gsm)),
+  )
+  const availableTypes = paperTypeOptions.filter(
+    t => !paperTypes.some(x => x.type === t.name),
+  )
 
   function openCreate() {
     setEditing(null); resetForm(); setOpen(true)
@@ -181,8 +223,9 @@ export default function ProductsPage() {
     try {
       const urls = await Promise.all(files.map(f => uploadToCloudinary(f, 'image')))
       setImages(prev => [...prev, ...urls])
-    } catch { /* no-op */ }
-    finally { setUploadingImages(false) }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Image upload failed')
+    } finally { setUploadingImages(false) }
   }
 
   async function uploadVideoFile(file: File) {
@@ -190,8 +233,9 @@ export default function ProductsPage() {
     try {
       const url = await uploadToCloudinary(file, 'video')
       setVideoUrl(url)
-    } catch { /* no-op */ }
-    finally { setUploadingVideo(false) }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Video upload failed')
+    } finally { setUploadingVideo(false) }
   }
 
   async function handleImageFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -241,19 +285,28 @@ export default function ProductsPage() {
       }
       if (editing) {
         await api.patch(`/admin/products/${editing.id}`, body)
+        toast.success('Product updated')
       } else {
         await api.post('/admin/products', body)
+        toast.success('Product created')
       }
       setOpen(false)
       load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save product')
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(id: string) {
-    await api.delete(`/admin/products/${id}`)
-    load()
+    try {
+      await api.delete(`/admin/products/${id}`)
+      toast.success('Product deleted')
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete product')
+    }
   }
 
   function toggleSize(name: string) {
@@ -268,18 +321,16 @@ export default function ProductsPage() {
   }
 
   function addQuality() {
-    const val = pendingGsm.trim()
-    if (!val) return
-    if (qualities.find(q => q.gsm === val)) return
-    setQualities(prev => [...prev, { gsm: val, price: '' }])
+    if (!pendingGsm) return
+    if (qualities.find(q => q.gsm === pendingGsm)) return
+    setQualities(prev => [...prev, { gsm: pendingGsm, price: '' }])
     setPendingGsm('')
   }
 
   function addType() {
-    const val = pendingType.trim()
-    if (!val) return
-    if (paperTypes.find(t => t.type === val)) return
-    setPaperTypes(prev => [...prev, { type: val, price: '' }])
+    if (!pendingType) return
+    if (paperTypes.find(t => t.type === pendingType)) return
+    setPaperTypes(prev => [...prev, { type: pendingType, price: '' }])
     setPendingType('')
   }
 
@@ -510,23 +561,49 @@ export default function ProductsPage() {
             {/* ── Paper Quality (GSM) ── */}
             <section className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Paper Quality — GSM Pricing</p>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="Enter GSM, e.g. 90, 130, 300, 350"
-                  value={pendingGsm}
-                  onChange={e => setPendingGsm(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addQuality())}
-                />
-                <Button type="button" variant="outline" size="icon" onClick={addQuality} disabled={!pendingGsm.trim()}>
-                  <PlusIcon className="h-4 w-4" />
-                </Button>
-              </div>
+              {paperQualityOptions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No GSM values configured.{' '}
+                  <Link href="/paper/qualities" className="text-primary underline-offset-4 hover:underline">
+                    Add paper GSM options
+                  </Link>
+                </p>
+              ) : (
+                <div className="flex gap-2">
+                  <Select
+                    value={pendingGsm || null}
+                    onValueChange={v => setPendingGsm(v ?? '')}
+                  >
+                    <SelectTrigger className="flex-1 w-full min-w-0">
+                      <SelectValue placeholder="Select GSM…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableQualities.map(q => (
+                        <SelectItem key={q.id} value={String(q.gsm)}>
+                          {q.gsm} gsm{q.label ? ` — ${q.label}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={addQuality}
+                    disabled={!pendingGsm || availableQualities.length === 0}
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              {availableQualities.length === 0 && paperQualityOptions.length > 0 && qualities.length > 0 && (
+                <p className="text-xs text-muted-foreground">All configured GSM values are added.</p>
+              )}
               {qualities.length > 0 && (
                 <div className="rounded-md border divide-y">
                   {qualities.map((q, i) => (
                     <div key={q.gsm} className="flex items-center gap-3 px-3 py-2">
-                      <span className="text-sm font-medium w-20 shrink-0">{q.gsm} gsm</span>
+                      <span className="text-sm font-medium w-36 shrink-0">{qualityDisplay(q.gsm)}</span>
                       <div className="relative flex-1">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">₹</span>
                         <Input type="number" className="pl-7" placeholder="Price per sheet" value={q.price} onChange={e => updateQuality(i, e.target.value)} />
@@ -543,17 +620,44 @@ export default function ProductsPage() {
             {/* ── Paper Type ── */}
             <section className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Paper Type Pricing</p>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter type, e.g. Matte, Glossy, UV, Normal"
-                  value={pendingType}
-                  onChange={e => setPendingType(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addType())}
-                />
-                <Button type="button" variant="outline" size="icon" onClick={addType} disabled={!pendingType.trim()}>
-                  <PlusIcon className="h-4 w-4" />
-                </Button>
-              </div>
+              {paperTypeOptions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No paper types configured.{' '}
+                  <Link href="/paper/types" className="text-primary underline-offset-4 hover:underline">
+                    Add paper types
+                  </Link>
+                </p>
+              ) : (
+                <div className="flex gap-2">
+                  <Select
+                    value={pendingType || null}
+                    onValueChange={v => setPendingType(v ?? '')}
+                  >
+                    <SelectTrigger className="flex-1 w-full min-w-0">
+                      <SelectValue placeholder="Select paper type…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableTypes.map(t => (
+                        <SelectItem key={t.id} value={t.name}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={addType}
+                    disabled={!pendingType || availableTypes.length === 0}
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              {availableTypes.length === 0 && paperTypeOptions.length > 0 && paperTypes.length > 0 && (
+                <p className="text-xs text-muted-foreground">All configured paper types are added.</p>
+              )}
               {paperTypes.length > 0 && (
                 <div className="rounded-md border divide-y">
                   {paperTypes.map((t, i) => (

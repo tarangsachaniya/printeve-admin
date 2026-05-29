@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,15 +28,20 @@ export default function PaymentsPage() {
     setLoading(true)
     api.get<{ items: Payment[]; total: number }>(`/admin/payments?page=${p}&limit=${limit}`)
       .then((res) => { setPayments(res.items ?? []); setTotal(res.total ?? 0) })
-      .catch(() => {})
+      .catch((err) => toast.error(err.message ?? 'Failed to load payments'))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => { load(page) }, [page])
 
   async function handleRefund(id: string) {
-    await api.post(`/admin/payments/${id}/refund`, {})
-    load(page)
+    try {
+      await api.post(`/admin/payments/${id}/refund`, {})
+      toast.success('Refund initiated')
+      load(page)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to process refund')
+    }
   }
 
   const statusColor: Record<string, 'default' | 'secondary' | 'destructive'> = {
