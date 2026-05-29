@@ -71,20 +71,7 @@ export function AppSidebar() {
           </Link>
         )}
 
-        {isSuperAdmin && (
-          <Link
-            href="/roles"
-            className={cn(
-              'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-              pathname === '/roles'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            <ShieldCheck className="h-4 w-4 shrink-0" />
-            Roles & Permissions
-          </Link>
-        )}
+
       </nav>
 
       <div className="px-3 py-4 border-t">
