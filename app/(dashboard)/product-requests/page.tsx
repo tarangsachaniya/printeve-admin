@@ -272,13 +272,20 @@ export default function ProductRequestsPage() {
 
               {showReject && detail.status === 'pending' && (
                 <div className="space-y-1.5">
-                  <Label>Rejection notes *</Label>
+                  <Label>Rejection reason <span className="text-destructive">*</span></Label>
                   <textarea
                     className="w-full min-h-[80px] rounded-lg border px-3 py-2 text-sm"
                     value={rejectNotes}
                     onChange={e => setRejectNotes(e.target.value)}
                     placeholder="Explain why this request was not approved…"
                   />
+                </div>
+              )}
+
+              {detail.status === 'rejected' && detail.admin_notes && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 space-y-1">
+                  <p className="text-xs font-semibold uppercase text-destructive">Rejection reason</p>
+                  <p className="text-sm">{detail.admin_notes}</p>
                 </div>
               )}
             </div>

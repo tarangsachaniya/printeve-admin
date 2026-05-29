@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { BellIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,7 @@ interface Notification {
 }
 
 export function NotificationBell() {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [count, setCount] = useState(0)
   const [items, setItems] = useState<Notification[]>([])
@@ -60,7 +62,7 @@ export function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-lg border bg-popover shadow-lg">
+          <div className="fixed top-16 left-0 z-50 w-60 rounded-b-lg border-x border-b bg-white dark:bg-zinc-900 shadow-xl">
             <div className="flex items-center justify-between border-b px-4 py-2.5">
               <span className="text-sm font-semibold">Notifications</span>
               <Link href="/product-requests" className="text-xs text-primary hover:underline" onClick={() => setOpen(false)}>
@@ -77,9 +79,9 @@ export function NotificationBell() {
                     type="button"
                     className={cn(
                       'w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors',
-                      !n.read && 'bg-primary/5',
+                      !n.read && 'bg-blue-50 dark:bg-blue-950',
                     )}
-                    onClick={() => { if (!n.read) markRead(n.id); setOpen(false) }}
+                    onClick={() => { if (!n.read) markRead(n.id); setOpen(false); router.push('/product-requests') }}
                   >
                     <div className="flex items-center gap-2 mb-0.5">
                       {!n.read && (

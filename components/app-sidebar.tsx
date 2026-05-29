@@ -7,7 +7,6 @@ import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
   Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox,
 } from 'lucide-react'
-import { NotificationBell } from '@/components/notification-bell'
 import { cn } from '@/lib/utils'
 import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
@@ -51,9 +50,8 @@ export function AppSidebar() {
 
   return (
     <aside className="flex flex-col w-60 shrink-0 border-r bg-sidebar h-screen sticky top-0">
-      <div className="flex items-center justify-between h-16 px-6 border-b">
+      <div className="flex items-center h-16 px-6 border-b">
         <span className="font-bold text-lg tracking-tight">PrintVana</span>
-        <NotificationBell />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
