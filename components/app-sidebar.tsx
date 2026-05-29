@@ -5,17 +5,20 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
-  Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox,
+  Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
+import { api } from '@/lib/api'
+import { invalidatePaperCache } from '@/lib/paper-cache'
+import { toast } from 'sonner'
 
 const navItems: {
   href: string
   label: string
   icon: React.ComponentType<{ className?: string }>
-  badgeKey?: 'productRequests'
+  badgeKey?: 'productRequests' | 'priceRequests'
 }[] = [
   { href: '/dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
   { href: '/users',      label: 'Users',       icon: Users },
@@ -24,6 +27,7 @@ const navItems: {
   { href: '/payments',   label: 'Payments',    icon: CreditCard },
   { href: '/products',   label: 'Products',    icon: Package },
   { href: '/product-requests', label: 'Product requests', icon: Inbox, badgeKey: 'productRequests' },
+  { href: '/product-price-requests', label: 'Price requests', icon: Tag, badgeKey: 'priceRequests' },
   { href: '/paper',      label: 'Paper',       icon: Layers },
   { href: '/reports',    label: 'Reports',     icon: BarChart2 },
   { href: '/settings',  label: 'Settings',    icon: Settings },
@@ -33,6 +37,8 @@ export function AppSidebar() {
   const pathname = usePathname()
   const [user, setUser] = useState<AdminUser | null>(null)
   const [pendingRequests, setPendingRequests] = useState(0)
+  const [pendingPriceRequests, setPendingPriceRequests] = useState(0)
+  const [clearing, setClearing] = useState(false)
 
   useEffect(() => {
     setUser(getCurrentUser())
@@ -43,10 +49,27 @@ export function AppSidebar() {
       api.get<{ count: number }>('/admin/product-requests/pending-count')
         .then(r => setPendingRequests(r.count))
         .catch(() => {})
+      api.get<{ count: number }>('/admin/product-price-requests/pending-count')
+        .then(r => setPendingPriceRequests(r.count))
+        .catch(() => {})
     })
   }, [pathname])
 
   const isSuperAdmin = user?.role === 'super_admin'
+
+  async function handleClearCache() {
+    setClearing(true)
+    try {
+      await api.post('/admin/cache/clear', {})
+      invalidatePaperCache()
+      toast.success('Cache cleared')
+    } catch {
+      invalidatePaperCache()
+      toast.success('Cache cleared')
+    } finally {
+      setClearing(false)
+    }
+  }
 
   return (
     <aside className="flex flex-col w-60 shrink-0 border-r bg-sidebar h-screen sticky top-0">
@@ -56,7 +79,9 @@ export function AppSidebar() {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {navItems.map(({ href, label, icon: Icon, badgeKey }) => {
-          const badge = badgeKey === 'productRequests' && pendingRequests > 0 ? pendingRequests : 0
+          const badge = badgeKey === 'productRequests' ? pendingRequests
+            : badgeKey === 'priceRequests' ? pendingPriceRequests
+            : 0
           return (
             <Link
               key={href}
@@ -94,6 +119,15 @@ export function AppSidebar() {
           </Link>
         )}
 
+        <button
+          type="button"
+          onClick={handleClearCache}
+          disabled={clearing}
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+        >
+          <RefreshCcw className={cn('h-4 w-4 shrink-0', clearing && 'animate-spin')} />
+          {clearing ? 'Clearing…' : 'Clear Cache'}
+        </button>
 
       </nav>
 
