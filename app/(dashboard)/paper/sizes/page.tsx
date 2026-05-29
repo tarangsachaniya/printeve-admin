@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { PlusIcon, Trash2Icon, ArrowLeftIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { invalidatePaperCache } from '@/lib/paper-cache'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +23,15 @@ interface PaperSize {
   width?: number | null
   height?: number | null
   unit?: Unit | null
+}
+
+function convertDim(value: string, from: Unit, to: Unit): string {
+  if (!value || from === to) return value
+  const num = parseFloat(value)
+  if (isNaN(num)) return value
+  const mm = from === 'mm' ? num : from === 'cm' ? num * 10 : num * 25.4
+  const result = to === 'mm' ? mm : to === 'cm' ? mm / 10 : mm / 25.4
+  return String(Math.round(result * 100) / 100)
 }
 
 function UnitToggle({ value, onChange }: { value: Unit; onChange: (u: Unit) => void }) {
@@ -70,6 +80,7 @@ export default function PaperSizesPage() {
     try {
       await api.post('/admin/paper/sizes', { name: val, sort_order: sizes.length })
       setNewName('')
+      invalidatePaperCache()
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add size')
@@ -85,6 +96,7 @@ export default function PaperSizesPage() {
     try {
       await api.post('/admin/paper/sizes', { name, width: w, height: h, unit: custUnit, sort_order: sizes.length })
       setCustWidth(''); setCustHeight(''); setCustName('')
+      invalidatePaperCache()
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add size')
@@ -94,10 +106,17 @@ export default function PaperSizesPage() {
   async function remove(id: string) {
     try {
       await api.delete(`/admin/paper/sizes/${id}`)
+      invalidatePaperCache()
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete size')
     }
+  }
+
+  function handleUnitChange(newUnit: Unit) {
+    setCustWidth(w => convertDim(w, custUnit, newUnit))
+    setCustHeight(h => convertDim(h, custUnit, newUnit))
+    setCustUnit(newUnit)
   }
 
   function dimLabel(s: PaperSize) {
@@ -164,7 +183,7 @@ export default function PaperSizesPage() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Unit</Label>
-                  <UnitToggle value={custUnit} onChange={setCustUnit} />
+                  <UnitToggle value={custUnit} onChange={handleUnitChange} />
                 </div>
               </div>
               <div className="flex gap-2">

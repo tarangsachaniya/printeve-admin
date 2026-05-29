@@ -1,16 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
 
 interface Order {
   id: string
@@ -21,41 +21,64 @@ interface Order {
 }
 
 const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled']
+const LIMIT = 25
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
-  const limit = 20
+  const [search, setSearch] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function load(p: number) {
+  function load(p: number, q: string) {
     setLoading(true)
-    api.get<{ items: Order[]; total: number }>(`/admin/orders?page=${p}&limit=${limit}`)
-      .then((res) => { setOrders(res.items); setTotal(res.total) })
+    const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) })
+    if (q) params.set('search', q)
+    api.get<{ items: Order[]; total: number }>(`/admin/orders?${params}`)
+      .then((res) => { setOrders(res.items ?? []); setTotal(res.total ?? 0) })
       .catch((err) => toast.error(err.message ?? 'Failed to load orders'))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load(page) }, [page])
+  useEffect(() => { load(page, search) }, [page])
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setPage(1)
+      load(1, search)
+    }, 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [search])
 
   async function handleStatusChange(id: string, status: string) {
     try {
       await api.patch(`/admin/orders/${id}/status`, { status })
-      load(page)
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update order status')
     }
   }
 
+  const pageCount = Math.max(1, Math.ceil(total / LIMIT))
+
   return (
     <div className="p-6 space-y-4">
       <h1 className="text-2xl font-bold">Orders</h1>
 
+      <DataTableSearch
+        value={search}
+        onChange={setSearch}
+        total={total}
+        filtered={total}
+        placeholder="Search orders…"
+      />
+
       {loading ? (
         <p className="text-muted-foreground">Loading…</p>
       ) : (
-        <>
+        <div className="space-y-3">
           <div className="rounded-md border bg-card">
             <Table>
               <TableHeader>
@@ -90,21 +113,22 @@ export default function OrdersPage() {
                 ))}
                 {orders.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">No orders found</TableCell>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      {search ? 'No orders match your search' : 'No orders found'}
+                    </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
-
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>{total} total orders</span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Prev</Button>
-              <Button variant="outline" size="sm" disabled={page * limit >= total} onClick={() => setPage(p => p + 1)}>Next</Button>
-            </div>
-          </div>
-        </>
+          <DataTablePagination
+            page={page}
+            pageCount={pageCount}
+            total={total}
+            pageSize={LIMIT}
+            onPageChange={(p) => { setPage(p); load(p, search) }}
+          />
+        </div>
       )}
     </div>
   )

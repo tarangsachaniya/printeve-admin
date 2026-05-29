@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { useDataTable } from '@/lib/use-data-table'
+import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
 import { validatePassword } from '@/lib/password'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,6 +34,7 @@ const emptyForm = { full_name: '', email: '', phone: '', password: '', role: 'ad
 export default function AdminsPage() {
   const [admins, setAdmins] = useState<Admin[]>([])
   const [loading, setLoading] = useState(true)
+  const table = useDataTable(admins, ['full_name', 'email', 'role', 'status'] as (keyof Admin)[])
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
@@ -68,8 +71,8 @@ export default function AdminsPage() {
   async function handleRevoke(id: string) {
     try {
       await api.delete(`/admin/admins/${id}`)
+      setAdmins(prev => prev.filter(a => a.id !== id))
       toast.success('Admin access revoked')
-      load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to revoke admin')
     }
@@ -85,52 +88,64 @@ export default function AdminsPage() {
       {loading ? (
         <p className="text-muted-foreground">Loading…</p>
       ) : (
-        <div className="rounded-md border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Joined</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {admins.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.full_name}</TableCell>
-                  <TableCell>{a.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={a.role === 'super_admin' ? 'default' : 'secondary'}>
-                      {a.role.replace('_', ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={a.status === 'active' ? 'default' : 'destructive'}>{a.status}</Badge>
-                  </TableCell>
-                  <TableCell>{new Date(a.created_at).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleRevoke(a.id)}
-                    >
-                      Revoke
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {admins.length === 0 && (
+        <div className="space-y-3">
+          <DataTableSearch
+            value={table.search}
+            onChange={table.setSearch}
+            total={admins.length}
+            filtered={table.total}
+            placeholder="Search admins…"
+          />
+          <div className="rounded-md border bg-card">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    No admins found
-                  </TableCell>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Joined</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {table.rows.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell className="font-medium">{a.full_name}</TableCell>
+                    <TableCell>{a.email}</TableCell>
+                    <TableCell>
+                      <Badge variant={a.role === 'super_admin' ? 'default' : 'secondary'}>
+                        {a.role.replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={a.status === 'active' ? 'default' : 'destructive'}>{a.status}</Badge>
+                    </TableCell>
+                    <TableCell>{new Date(a.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="destructive" size="sm" onClick={() => handleRevoke(a.id)}>
+                        Revoke
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {table.rows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      {table.search ? 'No admins match your search' : 'No admins found'}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <DataTablePagination
+            page={table.page}
+            pageCount={table.pageCount}
+            total={table.total}
+            pageSize={table.pageSize}
+            onPageChange={table.setPage}
+          />
         </div>
       )}
 

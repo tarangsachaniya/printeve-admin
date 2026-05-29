@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { validatePassword } from '@/lib/password'
@@ -14,6 +14,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
 
 interface User {
   id: string
@@ -24,32 +25,45 @@ interface User {
 }
 
 const emptyForm = { full_name: '', email: '', phone: '', password: '' }
+const LIMIT = 25
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
+  const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [pwError, setPwError] = useState('')
-  const limit = 20
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function load(p: number) {
+  function load(p: number, q: string) {
     setLoading(true)
-    api.get<{ items: User[]; total: number }>(`/admin/users?page=${p}&limit=${limit}`)
-      .then((res) => { setUsers(res.items); setTotal(res.total) })
+    const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) })
+    if (q) params.set('search', q)
+    api.get<{ items: User[]; total: number }>(`/admin/users?${params}`)
+      .then((res) => { setUsers(res.items ?? []); setTotal(res.total ?? 0) })
       .catch((err) => toast.error(err.message ?? 'Failed to load users'))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load(page) }, [page])
+  useEffect(() => { load(page, search) }, [page])
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setPage(1)
+      load(1, search)
+    }, 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [search])
 
   async function handleBan(id: string) {
     try {
       await api.patch(`/admin/users/${id}/ban`, {})
-      load(page)
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, status: 'banned' } : u))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to ban user')
     }
@@ -65,7 +79,7 @@ export default function UsersPage() {
       toast.success('User created')
       setOpen(false)
       setForm(emptyForm)
-      load(page)
+      load(page, search)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create user')
     } finally {
@@ -77,6 +91,8 @@ export default function UsersPage() {
     active: 'default', inactive: 'secondary', banned: 'destructive',
   }
 
+  const pageCount = Math.max(1, Math.ceil(total / LIMIT))
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -84,10 +100,18 @@ export default function UsersPage() {
         <Button onClick={() => { setForm(emptyForm); setPwError(''); setOpen(true) }}>Add User</Button>
       </div>
 
+      <DataTableSearch
+        value={search}
+        onChange={setSearch}
+        total={total}
+        filtered={total}
+        placeholder="Search users…"
+      />
+
       {loading ? (
         <p className="text-muted-foreground">Loading…</p>
       ) : (
-        <>
+        <div className="space-y-3">
           <div className="rounded-md border bg-card">
             <Table>
               <TableHeader>
@@ -110,13 +134,7 @@ export default function UsersPage() {
                     <TableCell>{new Date(u.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
                       {u.status !== 'banned' && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleBan(u.id)}
-                        >
-                          Ban
-                        </Button>
+                        <Button variant="destructive" size="sm" onClick={() => handleBan(u.id)}>Ban</Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -124,22 +142,21 @@ export default function UsersPage() {
                 {users.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                      No users found
+                      {search ? 'No users match your search' : 'No users found'}
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
-
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>{total} total users</span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Prev</Button>
-              <Button variant="outline" size="sm" disabled={page * limit >= total} onClick={() => setPage(p => p + 1)}>Next</Button>
-            </div>
-          </div>
-        </>
+          <DataTablePagination
+            page={page}
+            pageCount={pageCount}
+            total={total}
+            pageSize={LIMIT}
+            onPageChange={(p) => { setPage(p); load(p, search) }}
+          />
+        </div>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>

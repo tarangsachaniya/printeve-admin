@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Ruler, Layers, FileText, ChevronRightIcon } from 'lucide-react'
-import { api } from '@/lib/api'
+import { cachedGet } from '@/lib/paper-cache'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface Count { items: unknown[] }
@@ -47,9 +47,9 @@ export default function PaperDashboard() {
   const [typesCount,     setTypesCount]     = useState<number | null>(null)
 
   useEffect(() => {
-    api.get<Count>('/admin/paper/sizes').then(r => setSizesCount(r.items?.length ?? 0)).catch(() => {})
-    api.get<Count>('/admin/paper/qualities').then(r => setQualitiesCount(r.items?.length ?? 0)).catch(() => {})
-    api.get<Count>('/admin/paper/types').then(r => setTypesCount(r.items?.length ?? 0)).catch(() => {})
+    cachedGet<Count>('/admin/paper/sizes').then(r => setSizesCount(r.items?.length ?? 0)).catch(() => {})
+    cachedGet<Count>('/admin/paper/qualities').then(r => setQualitiesCount(r.items?.length ?? 0)).catch(() => {})
+    cachedGet<Count>('/admin/paper/types').then(r => setTypesCount(r.items?.length ?? 0)).catch(() => {})
   }, [])
 
   return (

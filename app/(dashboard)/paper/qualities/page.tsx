@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { PlusIcon, Trash2Icon, ArrowLeftIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { invalidatePaperCache } from '@/lib/paper-cache'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -35,6 +36,7 @@ export default function PaperQualitiesPage() {
     try {
       await api.post('/admin/paper/qualities', { gsm, label: newLabel.trim() || null })
       setNewGsm(''); setNewLabel('')
+      invalidatePaperCache()
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add GSM value')
@@ -44,6 +46,7 @@ export default function PaperQualitiesPage() {
   async function remove(id: string) {
     try {
       await api.delete(`/admin/paper/qualities/${id}`)
+      invalidatePaperCache()
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete GSM value')

@@ -6,18 +6,19 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { cachedGet } from '@/lib/paper-cache'
+import { useDataTable } from '@/lib/use-data-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Combobox } from '@/components/ui/combobox'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter,
 } from '@/components/ui/sheet'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
 import Link from 'next/link'
 
 function ToolbarButton({
@@ -51,7 +52,7 @@ interface Product {
   paper_sizes?: string[]
   paper_qualities?: { gsm: number; price: number }[]
   paper_types?: { type: string; price: number }[]
-  quantity_tiers?: { min_qty: number; max_qty: number | null; unit_price: number }[]
+  quantity_tiers?: { min_qty: number; max_qty: number | null; unit_price: number; max_completion_minutes: number | null }[]
   images?: string[]
   video_url?: string | null
 }
@@ -76,7 +77,7 @@ interface PaperTypeOption {
 
 type Quality = { gsm: string; price: string }
 type PaperTypeEntry = { type: string; price: string }
-type QtyTier = { min_qty: string; max_qty: string; unit_price: string }
+type QtyTier = { min_qty: string; max_qty: string; unit_price: string; max_completion_minutes: string }
 
 const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? ''
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? ''
@@ -108,6 +109,8 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null)
   const [saving, setSaving] = useState(false)
 
+  const table = useDataTable(products, ['name', 'base_price'] as (keyof Product)[])
+
   // Form state
   const [name, setName] = useState('')
   const [basePrice, setBasePrice] = useState('')
@@ -115,8 +118,7 @@ export default function ProductsPage() {
   const [qualities, setQualities] = useState<Quality[]>([])
   const [paperTypes, setPaperTypes] = useState<PaperTypeEntry[]>([])
   const [qtyTiers, setQtyTiers] = useState<QtyTier[]>([])
-  const [pendingGsm, setPendingGsm] = useState('')
-  const [pendingType, setPendingType] = useState('')
+
   const [pendingSize, setPendingSize] = useState('')
 
   // Description editor
@@ -170,9 +172,9 @@ export default function ProductsPage() {
   useEffect(() => {
     load()
     Promise.all([
-      api.get<{ items: PaperSize[] }>('/admin/paper/sizes'),
-      api.get<{ items: PaperQualityOption[] }>('/admin/paper/qualities'),
-      api.get<{ items: PaperTypeOption[] }>('/admin/paper/types'),
+      cachedGet<{ items: PaperSize[] }>('/admin/paper/sizes'),
+      cachedGet<{ items: PaperQualityOption[] }>('/admin/paper/qualities'),
+      cachedGet<{ items: PaperTypeOption[] }>('/admin/paper/types'),
     ])
       .then(([sizes, qualities, types]) => {
         setPaperSizes(sizes.items ?? [])
@@ -209,6 +211,7 @@ export default function ProductsPage() {
       min_qty: String(t.min_qty),
       max_qty: t.max_qty != null ? String(t.max_qty) : '',
       unit_price: String(t.unit_price),
+      max_completion_minutes: t.max_completion_minutes != null ? String(t.max_completion_minutes) : '',
     })))
     setImages(p.images ?? [])
     setVideoUrl(p.video_url ?? '')
@@ -279,19 +282,21 @@ export default function ProductsPage() {
           min_qty: Number(t.min_qty),
           max_qty: t.max_qty ? Number(t.max_qty) : null,
           unit_price: Number(t.unit_price),
+          max_completion_minutes: t.max_completion_minutes ? Number(t.max_completion_minutes) : null,
         })),
         images,
         video_url: videoUrl || null,
       }
       if (editing) {
         await api.patch(`/admin/products/${editing.id}`, body)
+        setProducts(prev => prev.map(p => p.id === editing.id ? { ...p, ...body } : p))
         toast.success('Product updated')
       } else {
-        await api.post('/admin/products', body)
+        const res = await api.post<{ data: Product }>('/admin/products', body)
+        setProducts(prev => [...prev, res.data ?? { id: '', ...body }])
         toast.success('Product created')
       }
       setOpen(false)
-      load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save product')
     } finally {
@@ -302,8 +307,8 @@ export default function ProductsPage() {
   async function handleDelete(id: string) {
     try {
       await api.delete(`/admin/products/${id}`)
+      setProducts(prev => prev.filter(p => p.id !== id))
       toast.success('Product deleted')
-      load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete product')
     }
@@ -320,18 +325,14 @@ export default function ProductsPage() {
     setPendingSize('')
   }
 
-  function addQuality() {
-    if (!pendingGsm) return
-    if (qualities.find(q => q.gsm === pendingGsm)) return
-    setQualities(prev => [...prev, { gsm: pendingGsm, price: '' }])
-    setPendingGsm('')
+  function addQuality(gsm: string) {
+    if (!gsm || qualities.find(q => q.gsm === gsm)) return
+    setQualities(prev => [...prev, { gsm, price: '' }])
   }
 
-  function addType() {
-    if (!pendingType) return
-    if (paperTypes.find(t => t.type === pendingType)) return
-    setPaperTypes(prev => [...prev, { type: pendingType, price: '' }])
-    setPendingType('')
+  function addType(type: string) {
+    if (!type || paperTypes.find(t => t.type === type)) return
+    setPaperTypes(prev => [...prev, { type, price: '' }])
   }
 
   function updateQuality(i: number, price: string) {
@@ -356,33 +357,51 @@ export default function ProductsPage() {
       {loading ? (
         <p className="text-muted-foreground">Loading…</p>
       ) : (
-        <div className="rounded-md border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {products.map(p => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell>₹{p.base_price?.toLocaleString('en-IN')}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button size="sm" variant="outline" onClick={() => openEdit(p)}>Edit</Button>
-                    <Button size="sm" variant="destructive" onClick={() => handleDelete(p.id)}>Delete</Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {products.length === 0 && (
+        <div className="space-y-3">
+          <DataTableSearch
+            value={table.search}
+            onChange={table.setSearch}
+            total={products.length}
+            filtered={table.total}
+            placeholder="Search products…"
+          />
+          <div className="rounded-md border bg-card">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">No products</TableCell>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {table.rows.map(p => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell>₹{p.base_price?.toLocaleString('en-IN')}</TableCell>
+                    <TableCell className="text-right space-x-2">
+                      <Button size="sm" variant="outline" onClick={() => openEdit(p)}>Edit</Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDelete(p.id)}>Delete</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {table.rows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                      {table.search ? 'No products match your search' : 'No products'}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <DataTablePagination
+            page={table.page}
+            pageCount={table.pageCount}
+            total={table.total}
+            pageSize={table.pageSize}
+            onPageChange={table.setPage}
+          />
         </div>
       )}
 
@@ -569,32 +588,16 @@ export default function ProductsPage() {
                   </Link>
                 </p>
               ) : (
-                <div className="flex gap-2">
-                  <Select
-                    value={pendingGsm || null}
-                    onValueChange={v => setPendingGsm(v ?? '')}
-                  >
-                    <SelectTrigger className="flex-1 w-full min-w-0">
-                      <SelectValue placeholder="Select GSM…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableQualities.map(q => (
-                        <SelectItem key={q.id} value={String(q.gsm)}>
-                          {q.gsm} gsm{q.label ? ` — ${q.label}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={addQuality}
-                    disabled={!pendingGsm || availableQualities.length === 0}
-                  >
-                    <PlusIcon className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Combobox
+                  options={availableQualities.map(q => ({
+                    value: String(q.gsm),
+                    label: q.gsm + ' gsm' + (q.label ? ` — ${q.label}` : ''),
+                  }))}
+                  onValueChange={addQuality}
+                  placeholder="Select GSM…"
+                  searchPlaceholder="Search GSM…"
+                  disabled={availableQualities.length === 0}
+                />
               )}
               {availableQualities.length === 0 && paperQualityOptions.length > 0 && qualities.length > 0 && (
                 <p className="text-xs text-muted-foreground">All configured GSM values are added.</p>
@@ -628,32 +631,13 @@ export default function ProductsPage() {
                   </Link>
                 </p>
               ) : (
-                <div className="flex gap-2">
-                  <Select
-                    value={pendingType || null}
-                    onValueChange={v => setPendingType(v ?? '')}
-                  >
-                    <SelectTrigger className="flex-1 w-full min-w-0">
-                      <SelectValue placeholder="Select paper type…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableTypes.map(t => (
-                        <SelectItem key={t.id} value={t.name}>
-                          {t.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={addType}
-                    disabled={!pendingType || availableTypes.length === 0}
-                  >
-                    <PlusIcon className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Combobox
+                  options={availableTypes.map(t => ({ value: t.name, label: t.name }))}
+                  onValueChange={addType}
+                  placeholder="Select paper type…"
+                  searchPlaceholder="Search type…"
+                  disabled={availableTypes.length === 0}
+                />
               )}
               {availableTypes.length === 0 && paperTypeOptions.length > 0 && paperTypes.length > 0 && (
                 <p className="text-xs text-muted-foreground">All configured paper types are added.</p>
@@ -680,25 +664,27 @@ export default function ProductsPage() {
             <section className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Quantity Pricing Tiers</p>
-                <Button variant="outline" size="sm" onClick={() => setQtyTiers(prev => [...prev, { min_qty: '', max_qty: '', unit_price: '' }])}>
+                <Button variant="outline" size="sm" onClick={() => setQtyTiers(prev => [...prev, { min_qty: '', max_qty: '', unit_price: '', max_completion_minutes: '' }])}>
                   <PlusIcon className="h-3.5 w-3.5 mr-1" />
                   Add Tier
                 </Button>
               </div>
               {qtyTiers.length > 0 ? (
                 <div className="rounded-md border">
-                  <div className="grid grid-cols-[1fr_1fr_1fr_32px] gap-2 px-3 py-2 border-b bg-muted/40">
+                  <div className="grid grid-cols-[1fr_1fr_1fr_1fr_32px] gap-2 px-3 py-2 border-b bg-muted/40">
                     <span className="text-xs text-muted-foreground font-medium">Min Qty</span>
                     <span className="text-xs text-muted-foreground font-medium">Max Qty</span>
                     <span className="text-xs text-muted-foreground font-medium">Unit Price (₹)</span>
+                    <span className="text-xs text-muted-foreground font-medium">Max Time (min)</span>
                     <span />
                   </div>
                   <div className="divide-y">
                     {qtyTiers.map((tier, i) => (
-                      <div key={i} className="grid grid-cols-[1fr_1fr_1fr_32px] gap-2 px-3 py-2 items-center">
+                      <div key={i} className="grid grid-cols-[1fr_1fr_1fr_1fr_32px] gap-2 px-3 py-2 items-center">
                         <Input type="number" placeholder="1" value={tier.min_qty} onChange={e => updateTier(i, 'min_qty', e.target.value)} />
                         <Input type="number" placeholder="∞ (blank)" value={tier.max_qty} onChange={e => updateTier(i, 'max_qty', e.target.value)} />
                         <Input type="number" placeholder="0" value={tier.unit_price} onChange={e => updateTier(i, 'unit_price', e.target.value)} />
+                        <Input type="number" placeholder="e.g. 120" value={tier.max_completion_minutes} onChange={e => updateTier(i, 'max_completion_minutes', e.target.value)} />
                         <Button variant="ghost" size="icon-sm" onClick={() => setQtyTiers(prev => prev.filter((_, j) => j !== i))}>
                           <XIcon className="h-3.5 w-3.5" />
                         </Button>
