@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { validatePassword } from '@/lib/password'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +41,11 @@ export default function PrintersPage() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [pwError, setPwError] = useState('')
+
+  const [resetTarget, setResetTarget] = useState<PrinterItem | null>(null)
+  const [resetPw, setResetPw] = useState('')
+  const [resetPwError, setResetPwError] = useState('')
+  const [resetting, setResetting] = useState(false)
 
   function load() {
     setLoading(true)
@@ -103,6 +111,23 @@ export default function PrintersPage() {
     }
   }
 
+  async function handleResetPassword() {
+    const err = validatePassword(resetPw)
+    if (err) { setResetPwError(err); return }
+    setResetting(true)
+    try {
+      await api.patch(`/admin/printers/${resetTarget!.id}/password`, { new_password: resetPw })
+      toast.success('Password reset')
+      setResetTarget(null)
+      setResetPw('')
+      setResetPwError('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to reset password')
+    } finally {
+      setResetting(false)
+    }
+  }
+
   function field(key: keyof typeof emptyForm) {
     return (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(f => ({ ...f, [key]: e.target.value }))
@@ -152,6 +177,9 @@ export default function PrintersPage() {
                     {p.status === 'suspended' && (
                       <Button size="sm" variant="outline" onClick={() => handleRevoke(p.id)}>Revoke Suspension</Button>
                     )}
+                    <Button size="sm" variant="outline" onClick={() => { setResetTarget(p); setResetPw(''); setResetPwError('') }}>
+                      Reset Password
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -206,6 +234,33 @@ export default function PrintersPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={!!resetTarget} onOpenChange={open => { if (!open) { setResetTarget(null); setResetPw(''); setResetPwError('') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader className="text-center">
+            <DialogTitle>Reset password</DialogTitle>
+            {resetTarget && (
+              <p className="text-sm text-muted-foreground">{resetTarget.business_name}</p>
+            )}
+          </DialogHeader>
+          <div className="py-2 space-y-1.5">
+            <Label>New password</Label>
+            <Input
+              type="password"
+              value={resetPw}
+              onChange={e => { setResetPw(e.target.value); setResetPwError('') }}
+              placeholder="Min. 8 chars, uppercase, number, symbol"
+            />
+            {resetPwError && <p className="text-xs text-destructive">{resetPwError}</p>}
+          </div>
+          <DialogFooter className="flex-row gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setResetTarget(null)} disabled={resetting}>Cancel</Button>
+            <Button className="flex-1" onClick={handleResetPassword} disabled={resetting || !resetPw}>
+              {resetting ? 'Saving…' : 'Save password'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
