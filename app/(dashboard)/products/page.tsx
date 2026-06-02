@@ -156,7 +156,7 @@ export default function ProductsPage() {
   function resetForm() {
     setName(''); setBasePrice(''); setPaperSizesSel([])
     setQualities([]); setPaperTypes([]); setQtyTiers([])
-    setPendingGsm(''); setPendingType(''); setPendingSize('')
+    setPendingSize('')
     setImages([]); setVideoUrl('')
     descEditor?.commands.setContent('')
   }
@@ -215,7 +215,7 @@ export default function ProductsPage() {
     })))
     setImages(p.images ?? [])
     setVideoUrl(p.video_url ?? '')
-    setPendingGsm(''); setPendingType(''); setPendingSize('')
+    setPendingSize('')
     descEditor?.commands.setContent(p.description ?? '')
     setOpen(true)
   }
