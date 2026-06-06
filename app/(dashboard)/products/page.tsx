@@ -6,7 +6,6 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
-import { cachedGet } from '@/lib/paper-cache'
 import { useDataTable } from '@/lib/use-data-table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -78,6 +77,8 @@ interface PaperTypeOption {
 type Quality = { gsm: string; price: string }
 type PaperTypeEntry = { type: string; price: string }
 type QtyTier = { min_qty: string; max_qty: string; unit_price: string; max_completion_minutes: string }
+interface City { id: string; name: string; state: string }
+type CityPricingEntry = { id?: string; city_id: string; city_name: string; base_price: string }
 
 const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? ''
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? ''
@@ -104,6 +105,9 @@ export default function ProductsPage() {
   const [paperSizes, setPaperSizes] = useState<PaperSize[]>([])
   const [paperQualityOptions, setPaperQualityOptions] = useState<PaperQualityOption[]>([])
   const [paperTypeOptions, setPaperTypeOptions] = useState<PaperTypeOption[]>([])
+  const [cities, setCities] = useState<City[]>([])
+  const [cityPricing, setCityPricing] = useState<CityPricingEntry[]>([])
+  const originalCityPricingRef = useRef<CityPricingEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
@@ -158,31 +162,30 @@ export default function ProductsPage() {
     setQualities([]); setPaperTypes([]); setQtyTiers([])
     setPendingSize('')
     setImages([]); setVideoUrl('')
+    setCityPricing([]); originalCityPricingRef.current = []
     descEditor?.commands.setContent('')
+  }
+
+  type ProductsResponse = {
+    items: Product[]
+    meta: { sizes: PaperSize[]; qualities: PaperQualityOption[]; types: PaperTypeOption[]; cities: City[] }
   }
 
   function load() {
     setLoading(true)
-    api.get<{ items: Product[] }>('/admin/products')
-      .then(res => setProducts(res.items ?? []))
+    api.get<ProductsResponse>('/admin/products')
+      .then(res => {
+        setProducts(res.items ?? [])
+        setPaperSizes(res.meta?.sizes ?? [])
+        setPaperQualityOptions(res.meta?.qualities ?? [])
+        setPaperTypeOptions(res.meta?.types ?? [])
+        setCities(res.meta?.cities ?? [])
+      })
       .catch((err) => toast.error(err.message ?? 'Failed to load products'))
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => {
-    load()
-    Promise.all([
-      cachedGet<{ items: PaperSize[] }>('/admin/paper/sizes'),
-      cachedGet<{ items: PaperQualityOption[] }>('/admin/paper/qualities'),
-      cachedGet<{ items: PaperTypeOption[] }>('/admin/paper/types'),
-    ])
-      .then(([sizes, qualities, types]) => {
-        setPaperSizes(sizes.items ?? [])
-        setPaperQualityOptions(qualities.items ?? [])
-        setPaperTypeOptions(types.items ?? [])
-      })
-      .catch(() => {})
-  }, [])
+  useEffect(() => { load() }, [])
 
   function qualityDisplay(gsm: string) {
     const opt = paperQualityOptions.find(q => String(q.gsm) === gsm)
@@ -217,6 +220,19 @@ export default function ProductsPage() {
     setVideoUrl(p.video_url ?? '')
     setPendingSize('')
     descEditor?.commands.setContent(p.description ?? '')
+    setCityPricing([]); originalCityPricingRef.current = []
+    api.get<{ items: Array<{ id: string; city_id: string; city_name: string; base_price: number | null }> }>(`/admin/products/${p.id}/city-pricing`)
+      .then(r => {
+        const entries = (r.items ?? []).map(item => ({
+          id: item.id,
+          city_id: item.city_id,
+          city_name: item.city_name ?? '',
+          base_price: item.base_price != null ? String(item.base_price) : '',
+        }))
+        setCityPricing(entries)
+        originalCityPricingRef.current = entries
+      })
+      .catch(() => {})
     setOpen(true)
   }
 
@@ -290,10 +306,13 @@ export default function ProductsPage() {
       if (editing) {
         await api.patch(`/admin/products/${editing.id}`, body)
         setProducts(prev => prev.map(p => p.id === editing.id ? { ...p, ...body } : p))
+        await syncCityPricing(editing.id)
         toast.success('Product updated')
       } else {
         const res = await api.post<{ data: Product }>('/admin/products', body)
-        setProducts(prev => [...prev, res.data ?? { id: '', ...body }])
+        const created = res.data ?? { id: '', ...body }
+        setProducts(prev => [...prev, created])
+        if (created.id && cityPricing.length > 0) await syncCityPricing(created.id)
         toast.success('Product created')
       }
       setOpen(false)
@@ -346,6 +365,48 @@ export default function ProductsPage() {
   function updateTier(i: number, field: keyof QtyTier, value: string) {
     setQtyTiers(prev => prev.map((x, j) => j === i ? { ...x, [field]: value } : x))
   }
+
+  function addCityPricing(cityId: string) {
+    const city = cities.find(c => c.id === cityId)
+    if (!city || cityPricing.some(e => e.city_id === cityId)) return
+    setCityPricing(prev => [...prev, { city_id: city.id, city_name: city.name, base_price: '' }])
+  }
+
+  function updateCityPrice(i: number, value: string) {
+    setCityPricing(prev => prev.map((x, j) => j === i ? { ...x, base_price: value } : x))
+  }
+
+  function removeCityPricing(i: number) {
+    setCityPricing(prev => prev.filter((_, j) => j !== i))
+  }
+
+  async function syncCityPricing(productId: string) {
+    const original = originalCityPricingRef.current
+    const current = cityPricing
+    const currentIds = new Set(current.map(e => e.id).filter((id): id is string => !!id))
+    for (const entry of original) {
+      if (entry.id && !currentIds.has(entry.id)) {
+        await api.delete(`/admin/products/${productId}/city-pricing/${entry.id}`)
+      }
+    }
+    for (const entry of current) {
+      if (!entry.id) {
+        await api.post(`/admin/products/${productId}/city-pricing`, {
+          city_id: entry.city_id,
+          base_price: entry.base_price !== '' ? Number(entry.base_price) : null,
+        })
+      } else {
+        const orig = original.find(o => o.id === entry.id)
+        if (orig && orig.base_price !== entry.base_price) {
+          await api.patch(`/admin/products/${productId}/city-pricing/${entry.id}`, {
+            base_price: entry.base_price !== '' ? Number(entry.base_price) : null,
+          })
+        }
+      }
+    }
+  }
+
+  const availableCities = cities.filter(c => !cityPricing.some(e => e.city_id === c.id))
 
   return (
     <div className="p-6 space-y-4">
@@ -694,6 +755,42 @@ export default function ProductsPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No tiers yet. Add tiers to set quantity-based pricing.</p>
+              )}
+            </section>
+
+            {/* ── City Pricing ── */}
+            <section className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">City Pricing Overrides</p>
+              <p className="text-xs text-muted-foreground">Override base price per city. Leave blank to inherit the product default.</p>
+              {cities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No cities configured.</p>
+              ) : (
+                <Combobox
+                  options={availableCities.map(c => ({ value: c.id, label: c.name }))}
+                  onValueChange={addCityPricing}
+                  placeholder="Select city…"
+                  searchPlaceholder="Search city…"
+                  disabled={availableCities.length === 0}
+                />
+              )}
+              {availableCities.length === 0 && cities.length > 0 && cityPricing.length > 0 && (
+                <p className="text-xs text-muted-foreground">All cities have overrides.</p>
+              )}
+              {cityPricing.length > 0 && (
+                <div className="rounded-md border divide-y">
+                  {cityPricing.map((entry, i) => (
+                    <div key={entry.city_id} className="flex items-center gap-3 px-3 py-2">
+                      <span className="text-sm font-medium w-36 shrink-0">{entry.city_name}</span>
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">₹</span>
+                        <Input type="number" className="pl-7" placeholder="Inherit from product" value={entry.base_price} onChange={e => updateCityPrice(i, e.target.value)} />
+                      </div>
+                      <Button variant="ghost" size="icon-sm" onClick={() => removeCityPricing(i)}>
+                        <XIcon className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               )}
             </section>
 
