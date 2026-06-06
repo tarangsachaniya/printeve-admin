@@ -42,7 +42,7 @@ export default function AdminsPage() {
   const [saving, setSaving] = useState(false)
   const [pwError, setPwError] = useState('')
 
-  function load(silent = false) {
+  async function load(silent = false) {
     if (!silent) setLoading(true)
     api.get<{ data: Admin[] }>('/admin/admins')
       .then((res) => setAdmins(res.data ?? []))
