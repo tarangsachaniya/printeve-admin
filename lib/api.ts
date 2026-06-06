@@ -25,7 +25,7 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const json = await res.json()
   if (!res.ok) throw new Error(json.error ?? 'Request failed')
-  return json as T
+  return (json.data ?? json) as T
 }
 
 export const api = {
