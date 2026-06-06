@@ -56,14 +56,19 @@ export default function PrintersPage() {
   const [resetPwError, setResetPwError] = useState('')
   const [resetting, setResetting] = useState(false)
 
-  function load(p: number, q: string, silent = false) {
+  async function load(p: number, q: string, silent = false) {
     if (!silent) setLoading(true)
-    const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) })
-    if (q) params.set('search', q)
-    api.get<{ items: PrinterItem[]; total: number }>(`/admin/printers?${params}`)
-      .then(res => { setPrinters(res.items ?? []); setTotal(res.total ?? 0) })
-      .catch((err) => toast.error(err.message ?? 'Failed to load printers'))
-      .finally(() => { if (!silent) setLoading(false) })
+    try {
+      const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) })
+      if (q) params.set('search', q)
+      const res = await api.get<{ items: PrinterItem[]; total: number }>(`/admin/printers?${params}`)
+      setPrinters(res.items ?? [])
+      setTotal(res.total ?? 0)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load printers')
+    } finally {
+      if (!silent) setLoading(false)
+    }
   }
 
   useEffect(() => { load(page, search) }, [page])

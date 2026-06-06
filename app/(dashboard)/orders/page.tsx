@@ -33,14 +33,19 @@ export default function OrdersPage() {
   const [search, setSearch] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function load(p: number, q: string, silent = false) {
+  async function load(p: number, q: string, silent = false) {
     if (!silent) setLoading(true)
-    const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) })
-    if (q) params.set('search', q)
-    api.get<{ items: Order[]; total: number }>(`/admin/orders?${params}`)
-      .then((res) => { setOrders(res.items ?? []); setTotal(res.total ?? 0) })
-      .catch((err) => toast.error(err.message ?? 'Failed to load orders'))
-      .finally(() => { if (!silent) setLoading(false) })
+    try {
+      const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) })
+      if (q) params.set('search', q)
+      const res = await api.get<{ items: Order[]; total: number }>(`/admin/orders?${params}`)
+      setOrders(res.items ?? [])
+      setTotal(res.total ?? 0)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load orders')
+    } finally {
+      if (!silent) setLoading(false)
+    }
   }
 
   useEffect(() => { load(page, search) }, [page])

@@ -44,10 +44,14 @@ export default function AdminsPage() {
 
   async function load(silent = false) {
     if (!silent) setLoading(true)
-    api.get<{ data: Admin[] }>('/admin/admins')
-      .then((res) => setAdmins(res.data ?? []))
-      .catch((err) => toast.error(err.message ?? 'Failed to load admins'))
-      .finally(() => { if (!silent) setLoading(false) })
+    try {
+      const res = await api.get<{ data: Admin[] }>('/admin/admins')
+      setAdmins(res.data ?? [])
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load admins')
+    } finally {
+      if (!silent) setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [])

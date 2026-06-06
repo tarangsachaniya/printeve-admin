@@ -26,12 +26,17 @@ export default function PaymentsPage() {
   const [total, setTotal] = useState(0)
   const limit = 20
 
-  function load(p: number, silent = false) {
+  async function load(p: number, silent = false) {
     if (!silent) setLoading(true)
-    api.get<{ items: Payment[]; total: number }>(`/admin/payments?page=${p}&limit=${limit}`)
-      .then((res) => { setPayments(res.items ?? []); setTotal(res.total ?? 0) })
-      .catch((err) => toast.error(err.message ?? 'Failed to load payments'))
-      .finally(() => { if (!silent) setLoading(false) })
+    try {
+      const res = await api.get<{ items: Payment[]; total: number }>(`/admin/payments?page=${p}&limit=${limit}`)
+      setPayments(res.items ?? [])
+      setTotal(res.total ?? 0)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load payments')
+    } finally {
+      if (!silent) setLoading(false)
+    }
   }
 
   useEffect(() => { load(page) }, [page])
