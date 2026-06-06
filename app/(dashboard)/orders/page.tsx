@@ -11,6 +11,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
+import { RefreshButton } from '@/components/refresh-button'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 
 interface Order {
   id: string
@@ -31,14 +33,14 @@ export default function OrdersPage() {
   const [search, setSearch] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function load(p: number, q: string) {
-    setLoading(true)
+  function load(p: number, q: string, silent = false) {
+    if (!silent) setLoading(true)
     const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) })
     if (q) params.set('search', q)
     api.get<{ items: Order[]; total: number }>(`/admin/orders?${params}`)
       .then((res) => { setOrders(res.items ?? []); setTotal(res.total ?? 0) })
       .catch((err) => toast.error(err.message ?? 'Failed to load orders'))
-      .finally(() => setLoading(false))
+      .finally(() => { if (!silent) setLoading(false) })
   }
 
   useEffect(() => { load(page, search) }, [page])
@@ -51,6 +53,8 @@ export default function OrdersPage() {
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [search])
+
+  const { refresh, lastRefreshed, refreshing } = useAutoRefresh(() => load(page, search, true))
 
   async function handleStatusChange(id: string, status: string) {
     try {
@@ -65,7 +69,10 @@ export default function OrdersPage() {
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Orders</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Orders</h1>
+        <RefreshButton onRefresh={refresh} lastRefreshed={lastRefreshed} refreshing={refreshing} />
+      </div>
 
       <DataTableSearch
         value={search}

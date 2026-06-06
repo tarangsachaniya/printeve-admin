@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
-  Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag,
+  Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag, MapPin,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
@@ -29,6 +29,7 @@ const navItems: {
   { href: '/product-requests', label: 'Product requests', icon: Inbox, badgeKey: 'productRequests' },
   { href: '/product-price-requests', label: 'Price requests', icon: Tag, badgeKey: 'priceRequests' },
   { href: '/paper',      label: 'Paper',       icon: Layers },
+  { href: '/cities',    label: 'Cities',      icon: MapPin },
   { href: '/reports',    label: 'Reports',     icon: BarChart2 },
   { href: '/settings',  label: 'Settings',    icon: Settings },
 ]
@@ -53,7 +54,7 @@ export function AppSidebar() {
         .then(r => setPendingPriceRequests(r.count))
         .catch(() => {})
     })
-  }, [pathname])
+  }, [])
 
   const isSuperAdmin = user?.role === 'super_admin'
 
@@ -86,6 +87,7 @@ export function AppSidebar() {
             <Link
               key={href}
               href={href}
+              prefetch={false}
               className={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 pathname === href
@@ -107,6 +109,7 @@ export function AppSidebar() {
         {isSuperAdmin && (
           <Link
             href="/admins"
+            prefetch={false}
             className={cn(
               'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
               pathname === '/admins'

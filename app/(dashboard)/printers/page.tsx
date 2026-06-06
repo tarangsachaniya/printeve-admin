@@ -18,6 +18,8 @@ import {
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter,
 } from '@/components/ui/sheet'
+import { RefreshButton } from '@/components/refresh-button'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 
 interface PrinterItem {
   id: string
@@ -54,14 +56,14 @@ export default function PrintersPage() {
   const [resetPwError, setResetPwError] = useState('')
   const [resetting, setResetting] = useState(false)
 
-  function load(p: number, q: string) {
-    setLoading(true)
+  function load(p: number, q: string, silent = false) {
+    if (!silent) setLoading(true)
     const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) })
     if (q) params.set('search', q)
     api.get<{ items: PrinterItem[]; total: number }>(`/admin/printers?${params}`)
       .then(res => { setPrinters(res.items ?? []); setTotal(res.total ?? 0) })
       .catch((err) => toast.error(err.message ?? 'Failed to load printers'))
-      .finally(() => setLoading(false))
+      .finally(() => { if (!silent) setLoading(false) })
   }
 
   useEffect(() => { load(page, search) }, [page])
@@ -74,6 +76,8 @@ export default function PrintersPage() {
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [search])
+
+  const { refresh, lastRefreshed, refreshing } = useAutoRefresh(() => load(page, search, true))
 
   async function handleApprove(id: string) {
     try {
@@ -159,7 +163,10 @@ export default function PrintersPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Printers</h1>
-        <Button onClick={() => { setForm(emptyForm); setPwError(''); setOpen(true) }}>Add Printer</Button>
+        <div className="flex items-center gap-2">
+          <RefreshButton onRefresh={refresh} lastRefreshed={lastRefreshed} refreshing={refreshing} />
+          <Button onClick={() => { setForm(emptyForm); setPwError(''); setOpen(true) }}>Add Printer</Button>
+        </div>
       </div>
 
       {loading ? (

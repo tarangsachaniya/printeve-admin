@@ -15,6 +15,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
 import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
+import { RefreshButton } from '@/components/refresh-button'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 
 interface User {
   id: string
@@ -39,14 +41,14 @@ export default function UsersPage() {
   const [pwError, setPwError] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function load(p: number, q: string) {
-    setLoading(true)
+  function load(p: number, q: string, silent = false) {
+    if (!silent) setLoading(true)
     const params = new URLSearchParams({ page: String(p), limit: String(LIMIT) })
     if (q) params.set('search', q)
     api.get<{ items: User[]; total: number }>(`/admin/users?${params}`)
       .then((res) => { setUsers(res.items ?? []); setTotal(res.total ?? 0) })
       .catch((err) => toast.error(err.message ?? 'Failed to load users'))
-      .finally(() => setLoading(false))
+      .finally(() => { if (!silent) setLoading(false) })
   }
 
   useEffect(() => { load(page, search) }, [page])
@@ -59,6 +61,8 @@ export default function UsersPage() {
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [search])
+
+  const { refresh, lastRefreshed, refreshing } = useAutoRefresh(() => load(page, search, true))
 
   async function handleBan(id: string) {
     try {
@@ -97,7 +101,10 @@ export default function UsersPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Users</h1>
-        <Button onClick={() => { setForm(emptyForm); setPwError(''); setOpen(true) }}>Add User</Button>
+        <div className="flex items-center gap-2">
+          <RefreshButton onRefresh={refresh} lastRefreshed={lastRefreshed} refreshing={refreshing} />
+          <Button onClick={() => { setForm(emptyForm); setPwError(''); setOpen(true) }}>Add User</Button>
+        </div>
       </div>
 
       <DataTableSearch

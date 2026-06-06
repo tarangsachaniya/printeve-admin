@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
+import { RefreshButton } from '@/components/refresh-button'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 
 interface Payment {
   id: string
@@ -24,15 +26,17 @@ export default function PaymentsPage() {
   const [total, setTotal] = useState(0)
   const limit = 20
 
-  function load(p: number) {
-    setLoading(true)
+  function load(p: number, silent = false) {
+    if (!silent) setLoading(true)
     api.get<{ items: Payment[]; total: number }>(`/admin/payments?page=${p}&limit=${limit}`)
       .then((res) => { setPayments(res.items ?? []); setTotal(res.total ?? 0) })
       .catch((err) => toast.error(err.message ?? 'Failed to load payments'))
-      .finally(() => setLoading(false))
+      .finally(() => { if (!silent) setLoading(false) })
   }
 
   useEffect(() => { load(page) }, [page])
+
+  const { refresh, lastRefreshed, refreshing } = useAutoRefresh(() => load(page, true))
 
   async function handleRefund(id: string) {
     try {
@@ -50,7 +54,10 @@ export default function PaymentsPage() {
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Payments</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Payments</h1>
+        <RefreshButton onRefresh={refresh} lastRefreshed={lastRefreshed} refreshing={refreshing} />
+      </div>
 
       {loading ? (
         <p className="text-muted-foreground">Loading…</p>

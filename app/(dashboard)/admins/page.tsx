@@ -19,6 +19,8 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import { RefreshButton } from '@/components/refresh-button'
+import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 
 interface Admin {
   id: string
@@ -40,15 +42,17 @@ export default function AdminsPage() {
   const [saving, setSaving] = useState(false)
   const [pwError, setPwError] = useState('')
 
-  function load() {
-    setLoading(true)
+  function load(silent = false) {
+    if (!silent) setLoading(true)
     api.get<{ data: Admin[] }>('/admin/admins')
       .then((res) => setAdmins(res.data ?? []))
       .catch((err) => toast.error(err.message ?? 'Failed to load admins'))
-      .finally(() => setLoading(false))
+      .finally(() => { if (!silent) setLoading(false) })
   }
 
   useEffect(() => { load() }, [])
+
+  const { refresh, lastRefreshed, refreshing } = useAutoRefresh(() => load(true))
 
   async function handleCreate() {
     const pwErr = validatePassword(form.password)
@@ -82,7 +86,10 @@ export default function AdminsPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Admins</h1>
-        <Button onClick={() => { setForm(emptyForm); setPwError(''); setOpen(true) }}>Add Admin</Button>
+        <div className="flex items-center gap-2">
+          <RefreshButton onRefresh={refresh} lastRefreshed={lastRefreshed} refreshing={refreshing} />
+          <Button onClick={() => { setForm(emptyForm); setPwError(''); setOpen(true) }}>Add Admin</Button>
+        </div>
       </div>
 
       {loading ? (
