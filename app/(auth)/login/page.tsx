@@ -146,7 +146,7 @@ export default function LoginPage() {
                 id="email"
                 type="email"
                 autoComplete="email"
-                placeholder="you@printvana.com"
+                placeholder="you@printEve.com"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
