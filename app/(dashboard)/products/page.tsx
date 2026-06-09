@@ -21,6 +21,15 @@ import { DataTableSearch, DataTablePagination } from '@/components/data-table-co
 import { PriceCalculatorModal } from '@/components/price-calculator-modal'
 import Link from 'next/link'
 
+function SectionHeader({ label, description }: { label: string; description?: string }) {
+  return (
+    <div className="pb-2 border-b space-y-0.5">
+      <p className="text-sm font-semibold text-foreground">{label}</p>
+      {description && <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>}
+    </div>
+  )
+}
+
 function ToolbarButton({
   onClick, active, disabled, children,
 }: {
@@ -44,9 +53,10 @@ function ToolbarButton({
 }
 
 function VariantOptionEditor({
-  title, emptyHint, entries, available, pending, setPending, onAdd, onUpdate, onRemove, comboboxPlaceholder,
+  title, description, emptyHint, entries, available, pending, setPending, onAdd, onUpdate, onRemove, comboboxPlaceholder,
 }: {
   title: string
+  description?: string
   emptyHint: React.ReactNode
   entries: { id: string; name: string; price_modifier: string }[]
   available: { id: string; name: string }[]
@@ -60,7 +70,7 @@ function VariantOptionEditor({
   const hasOptions = available.length > 0 || entries.length > 0
   return (
     <section className="space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+      <SectionHeader label={title} description={description} />
       {!hasOptions ? (
         <p className="text-sm text-muted-foreground">{emptyHint}</p>
       ) : (
@@ -136,7 +146,6 @@ interface PaperTypeOption {
   sort_order: number
 }
 
-// Display row carries the master-option id, its name (for label), and the modifier amount as a string for editing
 type OptionEntry = { id: string; name: string; price_modifier: string }
 type QtySlab = { min_qty: string; max_qty: string; price_modifier: string; max_completion_minutes: string }
 interface City { id: string; name: string; state: string }
@@ -177,7 +186,6 @@ export default function ProductsPage() {
 
   const table = useDataTable(products, ['name', 'base_price'] as (keyof Product)[])
 
-  // Form state
   const [name, setName] = useState('')
   const [basePrice, setBasePrice] = useState('')
   const [paperSizesSel, setPaperSizesSel] = useState<OptionEntry[]>([])
@@ -188,8 +196,6 @@ export default function ProductsPage() {
   const [pendingQuality, setPendingQuality] = useState('')
   const [pendingType, setPendingType] = useState('')
 
-
-  // Description editor
   const [showDescHtml, setShowDescHtml] = useState(false)
   const [descHtmlValue, setDescHtmlValue] = useState('')
 
@@ -211,7 +217,6 @@ export default function ProductsPage() {
     setShowDescHtml(v => !v)
   }
 
-  // Media state
   const [images, setImages] = useState<string[]>([])
   const [videoUrl, setVideoUrl] = useState('')
   const [uploadingImages, setUploadingImages] = useState(false)
@@ -535,7 +540,10 @@ export default function ProductsPage() {
 
             {/* ── Basic Info ── */}
             <section className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Basic Info</p>
+              <SectionHeader
+                label="Basic Information"
+                description="The product name shown to customers and the base price per unit before any size, quality, or quantity adjustments are applied."
+              />
               <div className="space-y-1.5">
                 <Label>Product Name <span className="text-destructive">*</span></Label>
                 <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Business Cards" />
@@ -548,7 +556,10 @@ export default function ProductsPage() {
 
             {/* ── Description ── */}
             <section className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</p>
+              <SectionHeader
+                label="Product Description"
+                description="Describe what this product includes — material, finish, use case, etc. This is shown to customers on the product page."
+              />
               <div className="rounded-lg border bg-card overflow-hidden">
                 <div className="flex items-center gap-0.5 px-2 py-1.5 border-b bg-muted/40 flex-wrap">
                   <ToolbarButton onClick={() => descEditor?.chain().focus().toggleBold().run()} active={descEditor?.isActive('bold')}><strong>B</strong></ToolbarButton>
@@ -580,7 +591,10 @@ export default function ProductsPage() {
 
             {/* ── Images ── */}
             <section className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Product Images</p>
+              <SectionHeader
+                label="Product Images"
+                description="Upload photos of this product. The first image is used as the thumbnail in listings. Supports PNG, JPG, and WEBP."
+              />
               <input ref={imgInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageFiles} />
               <div
                 onDragOver={e => { e.preventDefault(); setImgDragOver(true) }}
@@ -619,7 +633,10 @@ export default function ProductsPage() {
 
             {/* ── Video ── */}
             <section className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Product Video</p>
+              <SectionHeader
+                label="Product Video"
+                description="Optional. Upload a short video to show the product quality or printing process. Displayed on the product page."
+              />
               <input ref={vidInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoFile} />
               <div
                 onDragOver={e => { e.preventDefault(); setVidDragOver(true) }}
@@ -649,7 +666,8 @@ export default function ProductsPage() {
 
             {/* ── Paper Sizes ── */}
             <VariantOptionEditor
-              title="Paper Sizes — Price Modifiers"
+              title="Available Paper Sizes"
+              description="Select the paper sizes this product can be printed in. For each size, enter how much to add (+) or subtract (-) from the base price per unit. Leave blank or enter 0 if the size has no extra charge."
               emptyHint={<>No paper sizes configured.{' '}<Link href="/paper/sizes" className="text-primary underline-offset-4 hover:underline">Add paper sizes</Link></>}
               entries={paperSizesSel}
               available={availableSizes}
@@ -663,7 +681,8 @@ export default function ProductsPage() {
 
             {/* ── Paper Qualities ── */}
             <VariantOptionEditor
-              title="Paper Qualities — Price Modifiers"
+              title="Available Paper Qualities"
+              description="Select the paper quality (GSM / finish) options for this product. Enter how much to add (+) or subtract (-) from the base price per unit for each quality. Leave blank or enter 0 for no extra charge."
               emptyHint={<>No paper qualities configured.{' '}<Link href="/paper/qualities" className="text-primary underline-offset-4 hover:underline">Add paper qualities</Link></>}
               entries={paperQualitiesSel}
               available={availableQualities}
@@ -677,7 +696,8 @@ export default function ProductsPage() {
 
             {/* ── Paper Type ── */}
             <VariantOptionEditor
-              title="Paper Types — Price Modifiers"
+              title="Available Paper Types"
+              description="Select the paper types (e.g. Glossy, Matte, Kraft) available for this product. Enter how much to add (+) or subtract (-) from the base price per unit for each type. Leave blank or enter 0 for no extra charge."
               emptyHint={<>No paper types configured.{' '}<Link href="/paper/types" className="text-primary underline-offset-4 hover:underline">Add paper types</Link></>}
               entries={paperTypesSel}
               available={availableTypes}
@@ -691,16 +711,16 @@ export default function ProductsPage() {
 
             {/* ── Quantity Slabs ── */}
             <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Quantity Slabs — Price Modifiers</p>
-                <Button variant="outline" size="sm" onClick={() => setQtySlabs(prev => [...prev, { min_qty: '', max_qty: '', price_modifier: '', max_completion_minutes: '' }])}>
+              <div className="flex items-start justify-between gap-4">
+                <SectionHeader
+                  label="Quantity-Based Pricing (Slabs)"
+                  description="Set price adjustments based on order quantity. For each range, enter how much to add (+) or subtract (-) per unit from the base price. Also set the maximum time (in minutes) to fulfill orders in that range. Leave Max Qty blank for open-ended slabs (e.g. 100+)."
+                />
+                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setQtySlabs(prev => [...prev, { min_qty: '', max_qty: '', price_modifier: '', max_completion_minutes: '' }])}>
                   <PlusIcon className="h-3.5 w-3.5 mr-1" />
                   Add Slab
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                The unit price modifier (+/- ₹) for an order falling in this quantity range. Stacks on top of product base price.
-              </p>
               {qtySlabs.length > 0 ? (
                 <div className="rounded-md border">
                   <div className="grid grid-cols-[1fr_1fr_1fr_1fr_32px] gap-2 px-3 py-2 border-b bg-muted/40">
@@ -731,8 +751,10 @@ export default function ProductsPage() {
 
             {/* ── City Pricing ── */}
             <section className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">City Pricing Modifiers</p>
-              <p className="text-xs text-muted-foreground">Add city price modifiers (+/- ₹) to the base price.</p>
+              <SectionHeader
+                label="City-Specific Pricing"
+                description="Adjust the price for customers ordering from specific cities. Enter how much to add (+) or subtract (-) from the base price per unit. Cities without an entry use the default base price."
+              />
               {cities.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No cities configured.</p>
               ) : (
