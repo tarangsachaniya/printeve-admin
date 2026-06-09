@@ -60,7 +60,7 @@ export default function PaperTypesPage() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold">Paper Types</h1>
-          <p className="text-sm text-muted-foreground">Finish types available for products.</p>
+          <p className="text-sm text-muted-foreground">Paper types available for products.</p>
         </div>
       </div>
 

@@ -75,10 +75,10 @@ export default function ProductRequestsPage() {
     setShowReject(false)
     setRejectNotes('')
     try {
-      const res = await api.get<{ data: RequestDetail }>(`/admin/product-requests/${id}`)
-      setDetail(res.data)
-      setEditName(res.data.name)
-      setEditPrice(String(res.data.base_price))
+      const res = await api.get<RequestDetail>(`/admin/product-requests/${id}`)
+      setDetail(res)
+      setEditName(res.name)
+      setEditPrice(String(res.base_price))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load request')
       setSelectedId(null)

@@ -78,7 +78,7 @@ export default function PaperDashboard() {
           href="/paper/types"
           icon={FileText}
           title="Paper Types"
-          description="Finish types such as Matte, Glossy, UV, Silk."
+          description="Material types such as Matte, Glossy, Art Card."
           count={typesCount}
         />
       </div>

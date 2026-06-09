@@ -18,6 +18,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter,
 } from '@/components/ui/sheet'
 import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
+import { PriceCalculatorModal } from '@/components/price-calculator-modal'
 import Link from 'next/link'
 
 function ToolbarButton({
@@ -42,16 +43,76 @@ function ToolbarButton({
   )
 }
 
+function VariantOptionEditor({
+  title, emptyHint, entries, available, pending, setPending, onAdd, onUpdate, onRemove, comboboxPlaceholder,
+}: {
+  title: string
+  emptyHint: React.ReactNode
+  entries: { id: string; name: string; price_modifier: string }[]
+  available: { id: string; name: string }[]
+  pending: string
+  setPending: (v: string) => void
+  onAdd: (id: string) => void
+  onUpdate: (i: number, value: string) => void
+  onRemove: (i: number) => void
+  comboboxPlaceholder: string
+}) {
+  const hasOptions = available.length > 0 || entries.length > 0
+  return (
+    <section className="space-y-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+      {!hasOptions ? (
+        <p className="text-sm text-muted-foreground">{emptyHint}</p>
+      ) : (
+        <Combobox
+          options={available.map(o => ({ value: o.id, label: o.name }))}
+          value={pending}
+          onValueChange={v => { setPending(v); onAdd(v) }}
+          placeholder={comboboxPlaceholder}
+          searchPlaceholder="Search…"
+          disabled={available.length === 0}
+        />
+      )}
+      {available.length === 0 && entries.length > 0 && (
+        <p className="text-xs text-muted-foreground">All configured options are added.</p>
+      )}
+      {entries.length > 0 && (
+        <div className="rounded-md border divide-y">
+          {entries.map((e, i) => (
+            <div key={e.id} className="flex items-center gap-3 px-3 py-2">
+              <span className="text-sm font-medium w-28 shrink-0 truncate">{e.name}</span>
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">+/- ₹</span>
+                <Input type="number" step={0.05} className="pl-12" placeholder="0" value={e.price_modifier} onChange={ev => onUpdate(i, ev.target.value)} />
+              </div>
+              <Button variant="ghost" size="icon-sm" onClick={() => onRemove(i)}>
+                <XIcon className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+interface QuantitySlab {
+  min_qty: number
+  max_qty: number | null
+  price_modifier: number
+  max_completion_minutes: number | null
+}
+
 interface Product {
   id: string
   name: string
   base_price: number
   category_id: string
   description?: string | null
-  paper_sizes?: string[]
-  paper_qualities?: { gsm: number; price: number }[]
-  paper_types?: { type: string; price: number }[]
-  quantity_tiers?: { min_qty: number; max_qty: number | null; unit_price: number; max_completion_minutes: number | null }[]
+  paper_sizes?: { paper_size_id: string; name: string; price_modifier: number }[]
+  paper_qualities?: { paper_quality_id: string; name: string; price_modifier: number }[]
+  paper_types?: { paper_type_id: string; name: string; price_modifier: number }[]
+  quantity_slabs?: QuantitySlab[]
   images?: string[]
   video_url?: string | null
 }
@@ -62,10 +123,11 @@ interface PaperSize {
   sort_order: number
 }
 
-interface PaperQualityOption {
+interface PaperQuality {
   id: string
   gsm: number
   label: string | null
+  name: string
 }
 
 interface PaperTypeOption {
@@ -74,11 +136,11 @@ interface PaperTypeOption {
   sort_order: number
 }
 
-type Quality = { gsm: string; price: string }
-type PaperTypeEntry = { type: string; price: string }
-type QtyTier = { min_qty: string; max_qty: string; unit_price: string; max_completion_minutes: string }
+// Display row carries the master-option id, its name (for label), and the modifier amount as a string for editing
+type OptionEntry = { id: string; name: string; price_modifier: string }
+type QtySlab = { min_qty: string; max_qty: string; price_modifier: string; max_completion_minutes: string }
 interface City { id: string; name: string; state: string }
-type CityPricingEntry = { id?: string; city_id: string; city_name: string; base_price: string }
+type CityPricingEntry = { id?: string; city_id: string; city_name: string; price_modifier: string }
 
 const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? ''
 const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? ''
@@ -103,7 +165,7 @@ async function uploadToCloudinary(file: File, type: 'image' | 'video'): Promise<
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [paperSizes, setPaperSizes] = useState<PaperSize[]>([])
-  const [paperQualityOptions, setPaperQualityOptions] = useState<PaperQualityOption[]>([])
+  const [paperQualities, setPaperQualities] = useState<PaperQuality[]>([])
   const [paperTypeOptions, setPaperTypeOptions] = useState<PaperTypeOption[]>([])
   const [cities, setCities] = useState<City[]>([])
   const [cityPricing, setCityPricing] = useState<CityPricingEntry[]>([])
@@ -118,12 +180,14 @@ export default function ProductsPage() {
   // Form state
   const [name, setName] = useState('')
   const [basePrice, setBasePrice] = useState('')
-  const [paperSizesSel, setPaperSizesSel] = useState<string[]>([])
-  const [qualities, setQualities] = useState<Quality[]>([])
-  const [paperTypes, setPaperTypes] = useState<PaperTypeEntry[]>([])
-  const [qtyTiers, setQtyTiers] = useState<QtyTier[]>([])
-
+  const [paperSizesSel, setPaperSizesSel] = useState<OptionEntry[]>([])
+  const [paperQualitiesSel, setPaperQualitiesSel] = useState<OptionEntry[]>([])
+  const [paperTypesSel, setPaperTypesSel] = useState<OptionEntry[]>([])
+  const [qtySlabs, setQtySlabs] = useState<QtySlab[]>([])
   const [pendingSize, setPendingSize] = useState('')
+  const [pendingQuality, setPendingQuality] = useState('')
+  const [pendingType, setPendingType] = useState('')
+
 
   // Description editor
   const [showDescHtml, setShowDescHtml] = useState(false)
@@ -158,9 +222,9 @@ export default function ProductsPage() {
   const vidInputRef = useRef<HTMLInputElement>(null)
 
   function resetForm() {
-    setName(''); setBasePrice(''); setPaperSizesSel([])
-    setQualities([]); setPaperTypes([]); setQtyTiers([])
-    setPendingSize('')
+    setName(''); setBasePrice('')
+    setPaperSizesSel([]); setPaperQualitiesSel([]); setPaperTypesSel([]); setQtySlabs([])
+    setPendingSize(''); setPendingQuality(''); setPendingType('')
     setImages([]); setVideoUrl('')
     setCityPricing([]); originalCityPricingRef.current = []
     descEditor?.commands.setContent('')
@@ -168,7 +232,7 @@ export default function ProductsPage() {
 
   type ProductsResponse = {
     items: Product[]
-    meta: { sizes: PaperSize[]; qualities: PaperQualityOption[]; types: PaperTypeOption[]; cities: City[] }
+    meta: { sizes: PaperSize[]; qualities: PaperQuality[]; types: PaperTypeOption[]; cities: City[] }
   }
 
   function load() {
@@ -177,7 +241,14 @@ export default function ProductsPage() {
       .then(res => {
         setProducts(res.items ?? [])
         setPaperSizes(res.meta?.sizes ?? [])
-        setPaperQualityOptions(res.meta?.qualities ?? [])
+        setPaperQualities(
+          (res.meta?.qualities ?? []).map(q => ({
+            id: q.id,
+            gsm: q.gsm,
+            label: q.label,
+            name: q.label ? `${q.gsm} GSM (${q.label})` : `${q.gsm} GSM`,
+          }))
+        )
         setPaperTypeOptions(res.meta?.types ?? [])
         setCities(res.meta?.cities ?? [])
       })
@@ -187,17 +258,9 @@ export default function ProductsPage() {
 
   useEffect(() => { load() }, [])
 
-  function qualityDisplay(gsm: string) {
-    const opt = paperQualityOptions.find(q => String(q.gsm) === gsm)
-    return opt?.label ? `${gsm} gsm — ${opt.label}` : `${gsm} gsm`
-  }
-
-  const availableQualities = paperQualityOptions.filter(
-    q => !qualities.some(x => x.gsm === String(q.gsm)),
-  )
-  const availableTypes = paperTypeOptions.filter(
-    t => !paperTypes.some(x => x.type === t.name),
-  )
+  const availableSizes = paperSizes.filter(s => !paperSizesSel.some(x => x.id === s.id))
+  const availableQualities = paperQualities.filter(q => !paperQualitiesSel.some(x => x.id === q.id))
+  const availableTypes = paperTypeOptions.filter(t => !paperTypesSel.some(x => x.id === t.id))
 
   function openCreate() {
     setEditing(null); resetForm(); setOpen(true)
@@ -207,27 +270,27 @@ export default function ProductsPage() {
     setEditing(p)
     setName(p.name)
     setBasePrice(String(p.base_price))
-    setPaperSizesSel(p.paper_sizes ?? [])
-    setQualities((p.paper_qualities ?? []).map(q => ({ gsm: String(q.gsm), price: String(q.price) })))
-    setPaperTypes((p.paper_types ?? []).map(t => ({ type: t.type, price: String(t.price) })))
-    setQtyTiers((p.quantity_tiers ?? []).map(t => ({
-      min_qty: String(t.min_qty),
-      max_qty: t.max_qty != null ? String(t.max_qty) : '',
-      unit_price: String(t.unit_price),
-      max_completion_minutes: t.max_completion_minutes != null ? String(t.max_completion_minutes) : '',
+    setPaperSizesSel((p.paper_sizes ?? []).map(s => ({ id: s.paper_size_id, name: s.name, price_modifier: String(s.price_modifier) })))
+    setPaperQualitiesSel((p.paper_qualities ?? []).map(q => ({ id: q.paper_quality_id, name: q.name, price_modifier: String(q.price_modifier) })))
+    setPaperTypesSel((p.paper_types ?? []).map(t => ({ id: t.paper_type_id, name: t.name, price_modifier: String(t.price_modifier) })))
+    setQtySlabs((p.quantity_slabs ?? []).map(s => ({
+      min_qty: String(s.min_qty),
+      max_qty: s.max_qty != null ? String(s.max_qty) : '',
+      price_modifier: String(s.price_modifier ?? ''),
+      max_completion_minutes: s.max_completion_minutes != null ? String(s.max_completion_minutes) : '',
     })))
     setImages(p.images ?? [])
     setVideoUrl(p.video_url ?? '')
-    setPendingSize('')
+    setPendingSize(''); setPendingQuality(''); setPendingType('')
     descEditor?.commands.setContent(p.description ?? '')
     setCityPricing([]); originalCityPricingRef.current = []
-    api.get<{ items: Array<{ id: string; city_id: string; city_name: string; base_price: number | null }> }>(`/admin/products/${p.id}/city-pricing`)
+    api.get<{ items: Array<{ id: string; city_id: string; city_name: string; price_modifier: number | null }> }>(`/admin/products/${p.id}/city-pricing`)
       .then(r => {
         const entries = (r.items ?? []).map(item => ({
           id: item.id,
           city_id: item.city_id,
           city_name: item.city_name ?? '',
-          base_price: item.base_price != null ? String(item.base_price) : '',
+          price_modifier: item.price_modifier != null ? String(item.price_modifier) : '',
         }))
         setCityPricing(entries)
         originalCityPricingRef.current = entries
@@ -291,31 +354,30 @@ export default function ProductsPage() {
         name,
         base_price: Number(basePrice),
         description: descEditor?.getHTML() ?? null,
-        paper_sizes: paperSizesSel,
-        paper_qualities: qualities.map(q => ({ gsm: Number(q.gsm), price: Number(q.price) })),
-        paper_types: paperTypes.map(t => ({ type: t.type, price: Number(t.price) })),
-        quantity_tiers: qtyTiers.map(t => ({
-          min_qty: Number(t.min_qty),
-          max_qty: t.max_qty ? Number(t.max_qty) : null,
-          unit_price: Number(t.unit_price),
-          max_completion_minutes: t.max_completion_minutes ? Number(t.max_completion_minutes) : null,
+        paper_sizes: paperSizesSel.map(s => ({ paper_size_id: s.id, price_modifier: Number(s.price_modifier) || 0 })),
+        paper_qualities: paperQualitiesSel.map(q => ({ paper_quality_id: q.id, price_modifier: Number(q.price_modifier) || 0 })),
+        paper_types: paperTypesSel.map(t => ({ paper_type_id: t.id, price_modifier: Number(t.price_modifier) || 0 })),
+        quantity_slabs: qtySlabs.map(s => ({
+          min_qty: Number(s.min_qty),
+          max_qty: s.max_qty ? Number(s.max_qty) : null,
+          price_modifier: Number(s.price_modifier) || 0,
+          max_completion_minutes: s.max_completion_minutes ? Number(s.max_completion_minutes) : null,
         })),
         images,
         video_url: videoUrl || null,
       }
       if (editing) {
         await api.patch(`/admin/products/${editing.id}`, body)
-        setProducts(prev => prev.map(p => p.id === editing.id ? { ...p, ...body } : p))
         await syncCityPricing(editing.id)
         toast.success('Product updated')
       } else {
         const res = await api.post<{ data: Product }>('/admin/products', body)
         const created = res.data ?? { id: '', ...body }
-        setProducts(prev => [...prev, created])
         if (created.id && cityPricing.length > 0) await syncCityPricing(created.id)
         toast.success('Product created')
       }
       setOpen(false)
+      load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save product')
     } finally {
@@ -333,47 +395,41 @@ export default function ProductsPage() {
     }
   }
 
-  function toggleSize(name: string) {
-    setPaperSizesSel(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name])
+  function addOption(
+    setEntries: React.Dispatch<React.SetStateAction<OptionEntry[]>>,
+    entries: OptionEntry[],
+    available: { id: string; name: string }[],
+    id: string,
+  ) {
+    const opt = available.find(o => o.id === id)
+    if (!opt || entries.some(e => e.id === opt.id)) return
+    setEntries(prev => [...prev, { id: opt.id, name: opt.name, price_modifier: '' }])
   }
 
-  function addCustomSize() {
-    const val = pendingSize.trim()
-    if (!val || paperSizesSel.includes(val)) return
-    setPaperSizesSel(prev => [...prev, val])
-    setPendingSize('')
+  function updateOptionModifier(
+    setEntries: React.Dispatch<React.SetStateAction<OptionEntry[]>>,
+    i: number,
+    price_modifier: string,
+  ) {
+    setEntries(prev => prev.map((x, j) => j === i ? { ...x, price_modifier } : x))
   }
 
-  function addQuality(gsm: string) {
-    if (!gsm || qualities.find(q => q.gsm === gsm)) return
-    setQualities(prev => [...prev, { gsm, price: '' }])
+  function removeOption(setEntries: React.Dispatch<React.SetStateAction<OptionEntry[]>>, i: number) {
+    setEntries(prev => prev.filter((_, j) => j !== i))
   }
 
-  function addType(type: string) {
-    if (!type || paperTypes.find(t => t.type === type)) return
-    setPaperTypes(prev => [...prev, { type, price: '' }])
-  }
-
-  function updateQuality(i: number, price: string) {
-    setQualities(prev => prev.map((x, j) => j === i ? { ...x, price } : x))
-  }
-
-  function updateType(i: number, price: string) {
-    setPaperTypes(prev => prev.map((x, j) => j === i ? { ...x, price } : x))
-  }
-
-  function updateTier(i: number, field: keyof QtyTier, value: string) {
-    setQtyTiers(prev => prev.map((x, j) => j === i ? { ...x, [field]: value } : x))
+  function updateSlab(i: number, field: keyof QtySlab, value: string) {
+    setQtySlabs(prev => prev.map((x, j) => j === i ? { ...x, [field]: value } : x))
   }
 
   function addCityPricing(cityId: string) {
     const city = cities.find(c => c.id === cityId)
     if (!city || cityPricing.some(e => e.city_id === cityId)) return
-    setCityPricing(prev => [...prev, { city_id: city.id, city_name: city.name, base_price: '' }])
+    setCityPricing(prev => [...prev, { city_id: city.id, city_name: city.name, price_modifier: '' }])
   }
 
   function updateCityPrice(i: number, value: string) {
-    setCityPricing(prev => prev.map((x, j) => j === i ? { ...x, base_price: value } : x))
+    setCityPricing(prev => prev.map((x, j) => j === i ? { ...x, price_modifier: value } : x))
   }
 
   function removeCityPricing(i: number) {
@@ -393,13 +449,13 @@ export default function ProductsPage() {
       if (!entry.id) {
         await api.post(`/admin/products/${productId}/city-pricing`, {
           city_id: entry.city_id,
-          base_price: entry.base_price !== '' ? Number(entry.base_price) : null,
+          price_modifier: entry.price_modifier !== '' ? Number(entry.price_modifier) : 0,
         })
       } else {
         const orig = original.find(o => o.id === entry.id)
-        if (orig && orig.base_price !== entry.base_price) {
+        if (orig && orig.price_modifier !== entry.price_modifier) {
           await api.patch(`/admin/products/${productId}/city-pricing/${entry.id}`, {
-            base_price: entry.base_price !== '' ? Number(entry.base_price) : null,
+            price_modifier: entry.price_modifier !== '' ? Number(entry.price_modifier) : 0,
           })
         }
       }
@@ -412,7 +468,10 @@ export default function ProductsPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Products</h1>
-        <Button onClick={openCreate}>Add Product</Button>
+        <div className="flex items-center gap-2">
+          <PriceCalculatorModal products={products} cities={cities} />
+          <Button onClick={openCreate}>Add Product</Button>
+        </div>
       </div>
 
       {loading ? (
@@ -589,164 +648,76 @@ export default function ProductsPage() {
             </section>
 
             {/* ── Paper Sizes ── */}
-            <section className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Supported Paper Sizes</p>
+            <VariantOptionEditor
+              title="Paper Sizes — Price Modifiers"
+              emptyHint={<>No paper sizes configured.{' '}<Link href="/paper/sizes" className="text-primary underline-offset-4 hover:underline">Add paper sizes</Link></>}
+              entries={paperSizesSel}
+              available={availableSizes}
+              pending={pendingSize}
+              setPending={setPendingSize}
+              onAdd={id => addOption(setPaperSizesSel, paperSizesSel, availableSizes, id)}
+              onUpdate={(i, v) => updateOptionModifier(setPaperSizesSel, i, v)}
+              onRemove={i => removeOption(setPaperSizesSel, i)}
+              comboboxPlaceholder="Select size…"
+            />
 
-              {/* Selected sizes as removable chips */}
-              {paperSizesSel.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {paperSizesSel.map(s => (
-                    <span key={s} className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 text-primary px-2.5 py-0.5 text-sm font-medium">
-                      {s}
-                      <button type="button" onClick={() => setPaperSizesSel(prev => prev.filter(x => x !== s))}>
-                        <XIcon className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* DB sizes as quick-add suggestions */}
-              {paperSizes.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {paperSizes
-                    .filter(s => !paperSizesSel.includes(s.name))
-                    .map(s => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => toggleSize(s.name)}
-                        className="rounded-full border border-input px-2.5 py-0.5 text-sm hover:border-primary hover:bg-primary/5 transition-colors"
-                      >
-                        + {s.name}
-                      </button>
-                    ))}
-                </div>
-              )}
-
-              {/* Custom size input */}
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Custom size, e.g. 100×150mm, DL, Custom"
-                  value={pendingSize}
-                  onChange={e => setPendingSize(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCustomSize())}
-                />
-                <Button type="button" variant="outline" size="icon" onClick={addCustomSize} disabled={!pendingSize.trim()}>
-                  <PlusIcon className="h-4 w-4" />
-                </Button>
-              </div>
-            </section>
-
-            {/* ── Paper Quality (GSM) ── */}
-            <section className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Paper Quality — GSM Pricing</p>
-              {paperQualityOptions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No GSM values configured.{' '}
-                  <Link href="/paper/qualities" className="text-primary underline-offset-4 hover:underline">
-                    Add paper GSM options
-                  </Link>
-                </p>
-              ) : (
-                <Combobox
-                  options={availableQualities.map(q => ({
-                    value: String(q.gsm),
-                    label: q.gsm + ' gsm' + (q.label ? ` — ${q.label}` : ''),
-                  }))}
-                  onValueChange={addQuality}
-                  placeholder="Select GSM…"
-                  searchPlaceholder="Search GSM…"
-                  disabled={availableQualities.length === 0}
-                />
-              )}
-              {availableQualities.length === 0 && paperQualityOptions.length > 0 && qualities.length > 0 && (
-                <p className="text-xs text-muted-foreground">All configured GSM values are added.</p>
-              )}
-              {qualities.length > 0 && (
-                <div className="rounded-md border divide-y">
-                  {qualities.map((q, i) => (
-                    <div key={q.gsm} className="flex items-center gap-3 px-3 py-2">
-                      <span className="text-sm font-medium w-36 shrink-0">{qualityDisplay(q.gsm)}</span>
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">₹</span>
-                        <Input type="number" className="pl-7" placeholder="Price per sheet" value={q.price} onChange={e => updateQuality(i, e.target.value)} />
-                      </div>
-                      <Button variant="ghost" size="icon-sm" onClick={() => setQualities(prev => prev.filter((_, j) => j !== i))}>
-                        <XIcon className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+            {/* ── Paper Qualities ── */}
+            <VariantOptionEditor
+              title="Paper Qualities — Price Modifiers"
+              emptyHint={<>No paper qualities configured.{' '}<Link href="/paper/qualities" className="text-primary underline-offset-4 hover:underline">Add paper qualities</Link></>}
+              entries={paperQualitiesSel}
+              available={availableQualities}
+              pending={pendingQuality}
+              setPending={setPendingQuality}
+              onAdd={id => addOption(setPaperQualitiesSel, paperQualitiesSel, availableQualities, id)}
+              onUpdate={(i, v) => updateOptionModifier(setPaperQualitiesSel, i, v)}
+              onRemove={i => removeOption(setPaperQualitiesSel, i)}
+              comboboxPlaceholder="Select paper quality…"
+            />
 
             {/* ── Paper Type ── */}
-            <section className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Paper Type Pricing</p>
-              {paperTypeOptions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No paper types configured.{' '}
-                  <Link href="/paper/types" className="text-primary underline-offset-4 hover:underline">
-                    Add paper types
-                  </Link>
-                </p>
-              ) : (
-                <Combobox
-                  options={availableTypes.map(t => ({ value: t.name, label: t.name }))}
-                  onValueChange={addType}
-                  placeholder="Select paper type…"
-                  searchPlaceholder="Search type…"
-                  disabled={availableTypes.length === 0}
-                />
-              )}
-              {availableTypes.length === 0 && paperTypeOptions.length > 0 && paperTypes.length > 0 && (
-                <p className="text-xs text-muted-foreground">All configured paper types are added.</p>
-              )}
-              {paperTypes.length > 0 && (
-                <div className="rounded-md border divide-y">
-                  {paperTypes.map((t, i) => (
-                    <div key={t.type} className="flex items-center gap-3 px-3 py-2">
-                      <span className="text-sm font-medium w-24 shrink-0">{t.type}</span>
-                      <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">₹</span>
-                        <Input type="number" className="pl-7" placeholder="Price" value={t.price} onChange={e => updateType(i, e.target.value)} />
-                      </div>
-                      <Button variant="ghost" size="icon-sm" onClick={() => setPaperTypes(prev => prev.filter((_, j) => j !== i))}>
-                        <XIcon className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
+            <VariantOptionEditor
+              title="Paper Types — Price Modifiers"
+              emptyHint={<>No paper types configured.{' '}<Link href="/paper/types" className="text-primary underline-offset-4 hover:underline">Add paper types</Link></>}
+              entries={paperTypesSel}
+              available={availableTypes}
+              pending={pendingType}
+              setPending={setPendingType}
+              onAdd={id => addOption(setPaperTypesSel, paperTypesSel, availableTypes, id)}
+              onUpdate={(i, v) => updateOptionModifier(setPaperTypesSel, i, v)}
+              onRemove={i => removeOption(setPaperTypesSel, i)}
+              comboboxPlaceholder="Select paper type…"
+            />
 
-            {/* ── Quantity Pricing Tiers ── */}
+            {/* ── Quantity Slabs ── */}
             <section className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Quantity Pricing Tiers</p>
-                <Button variant="outline" size="sm" onClick={() => setQtyTiers(prev => [...prev, { min_qty: '', max_qty: '', unit_price: '', max_completion_minutes: '' }])}>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Quantity Slabs — Price Modifiers</p>
+                <Button variant="outline" size="sm" onClick={() => setQtySlabs(prev => [...prev, { min_qty: '', max_qty: '', price_modifier: '', max_completion_minutes: '' }])}>
                   <PlusIcon className="h-3.5 w-3.5 mr-1" />
-                  Add Tier
+                  Add Slab
                 </Button>
               </div>
-              {qtyTiers.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                The unit price modifier (+/- ₹) for an order falling in this quantity range. Stacks on top of product base price.
+              </p>
+              {qtySlabs.length > 0 ? (
                 <div className="rounded-md border">
                   <div className="grid grid-cols-[1fr_1fr_1fr_1fr_32px] gap-2 px-3 py-2 border-b bg-muted/40">
                     <span className="text-xs text-muted-foreground font-medium">Min Qty</span>
                     <span className="text-xs text-muted-foreground font-medium">Max Qty</span>
-                    <span className="text-xs text-muted-foreground font-medium">Unit Price (₹)</span>
+                    <span className="text-xs text-muted-foreground font-medium">Price Modifier (+/- ₹)</span>
                     <span className="text-xs text-muted-foreground font-medium">Max Time (min)</span>
                     <span />
                   </div>
                   <div className="divide-y">
-                    {qtyTiers.map((tier, i) => (
+                    {qtySlabs.map((slab, i) => (
                       <div key={i} className="grid grid-cols-[1fr_1fr_1fr_1fr_32px] gap-2 px-3 py-2 items-center">
-                        <Input type="number" placeholder="1" value={tier.min_qty} onChange={e => updateTier(i, 'min_qty', e.target.value)} />
-                        <Input type="number" placeholder="∞ (blank)" value={tier.max_qty} onChange={e => updateTier(i, 'max_qty', e.target.value)} />
-                        <Input type="number" placeholder="0" value={tier.unit_price} onChange={e => updateTier(i, 'unit_price', e.target.value)} />
-                        <Input type="number" placeholder="e.g. 120" value={tier.max_completion_minutes} onChange={e => updateTier(i, 'max_completion_minutes', e.target.value)} />
-                        <Button variant="ghost" size="icon-sm" onClick={() => setQtyTiers(prev => prev.filter((_, j) => j !== i))}>
+                        <Input type="number" placeholder="1" value={slab.min_qty} onChange={e => updateSlab(i, 'min_qty', e.target.value)} />
+                        <Input type="number" placeholder="∞ (blank)" value={slab.max_qty} onChange={e => updateSlab(i, 'max_qty', e.target.value)} />
+                        <Input type="number" step={0.05} placeholder="0" value={slab.price_modifier} onChange={e => updateSlab(i, 'price_modifier', e.target.value)} />
+                        <Input type="number" placeholder="e.g. 120" value={slab.max_completion_minutes} onChange={e => updateSlab(i, 'max_completion_minutes', e.target.value)} />
+                        <Button variant="ghost" size="icon-sm" onClick={() => setQtySlabs(prev => prev.filter((_, j) => j !== i))}>
                           <XIcon className="h-3.5 w-3.5" />
                         </Button>
                       </div>
@@ -754,14 +725,14 @@ export default function ProductsPage() {
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No tiers yet. Add tiers to set quantity-based pricing.</p>
+                <p className="text-sm text-muted-foreground">No slabs yet. Add slabs to set quantity-based pricing modifiers.</p>
               )}
             </section>
 
             {/* ── City Pricing ── */}
             <section className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">City Pricing Overrides</p>
-              <p className="text-xs text-muted-foreground">Override base price per city. Leave blank to inherit the product default.</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">City Pricing Modifiers</p>
+              <p className="text-xs text-muted-foreground">Add city price modifiers (+/- ₹) to the base price.</p>
               {cities.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No cities configured.</p>
               ) : (
@@ -782,8 +753,8 @@ export default function ProductsPage() {
                     <div key={entry.city_id} className="flex items-center gap-3 px-3 py-2">
                       <span className="text-sm font-medium w-36 shrink-0">{entry.city_name}</span>
                       <div className="relative flex-1">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">₹</span>
-                        <Input type="number" className="pl-7" placeholder="Inherit from product" value={entry.base_price} onChange={e => updateCityPrice(i, e.target.value)} />
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">+/- ₹</span>
+                        <Input type="number" step={0.05} className="pl-12" placeholder="0" value={entry.price_modifier} onChange={e => updateCityPrice(i, e.target.value)} />
                       </div>
                       <Button variant="ghost" size="icon-sm" onClick={() => removeCityPricing(i)}>
                         <XIcon className="h-3.5 w-3.5" />
