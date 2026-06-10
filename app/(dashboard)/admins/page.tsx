@@ -105,7 +105,7 @@ export default function AdminsPage() {
             onChange={table.setSearch}
             total={admins.length}
             filtered={table.total}
-            placeholder="Search admins…"
+            placeholder="Search admin"
           />
           <div className="rounded-md border bg-card">
             <Table>
