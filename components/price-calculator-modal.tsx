@@ -87,18 +87,19 @@ export function PriceCalculatorModal({ products, cities }: Props) {
     const quality = (product.paper_qualities ?? []).find(q => q.paper_quality_id === qualityId)
     const type    = (product.paper_types ?? []).find(t => t.paper_type_id === typeId)
 
-    if (!size || !type) return null
+    if ((product.paper_sizes ?? []).length > 0 && !size) return null
+    if ((product.paper_types ?? []).length > 0 && !type) return null
 
     const basePrice  = Number(product.base_price)
-    const sizeMod    = Number(size.price_modifier)
+    const sizeMod    = size ? Number(size.price_modifier) : 0
     const qualityMod = quality ? Number(quality.price_modifier) : 0
-    const typeMod    = Number(type.price_modifier)
+    const typeMod    = type ? Number(type.price_modifier) : 0
     const slabMod    = Number(slab.price_modifier)
     const cityMod    = cityModifier
     const unitPrice  = basePrice + sizeMod + qualityMod + typeMod + slabMod + cityMod
 
     return {
-      basePrice, sizeMod, qualityMod, typeMod, slabMod, cityMod, quality,
+      basePrice, sizeMod, qualityMod, typeMod, slabMod, cityMod, quality, type,
       unitPrice, totalPrice: unitPrice * quantity, quantity,
       completionMinutes: slab.max_completion_minutes,
     }
@@ -211,20 +212,24 @@ export function PriceCalculatorModal({ products, cities }: Props) {
                     <span>Product base price</span>
                     <span>₹{result.basePrice.toLocaleString('en-IN')}</span>
                   </div>
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Size modifier</span>
-                    <span>{fmt(result.sizeMod)}</span>
-                  </div>
+                  {sizes.length > 0 && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Size modifier</span>
+                      <span>{fmt(result.sizeMod)}</span>
+                    </div>
+                  )}
                   {result.quality && (
                     <div className="flex justify-between text-muted-foreground">
                       <span>Quality modifier</span>
                       <span>{fmt(result.qualityMod)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>Type modifier</span>
-                    <span>{fmt(result.typeMod)}</span>
-                  </div>
+                  {result.type && (
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Type modifier</span>
+                      <span>{fmt(result.typeMod)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-muted-foreground">
                     <span>Quantity slab modifier</span>
                     <span>{fmt(result.slabMod)}</span>

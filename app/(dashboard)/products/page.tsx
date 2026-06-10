@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { PlusIcon, VideoIcon, XIcon, UploadIcon } from 'lucide-react'
+import { PlusIcon, VideoIcon, XIcon, UploadIcon, Info } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { toast } from 'sonner'
@@ -19,13 +19,21 @@ import {
 } from '@/components/ui/sheet'
 import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
 import { PriceCalculatorModal } from '@/components/price-calculator-modal'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import Link from 'next/link'
 
 function SectionHeader({ label, description }: { label: string; description?: string }) {
   return (
-    <div className="pb-2 border-b space-y-0.5">
+    <div className="pb-2 border-b flex items-center gap-1.5">
       <p className="text-sm font-semibold text-foreground">{label}</p>
-      {description && <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>}
+      {description && (
+        <Tooltip>
+          <TooltipTrigger className="text-muted-foreground hover:text-foreground">
+            <Info className="h-3.5 w-3.5" />
+          </TooltipTrigger>
+          <TooltipContent side="right" className="max-w-sm">{description}</TooltipContent>
+        </Tooltip>
+      )}
     </div>
   )
 }
