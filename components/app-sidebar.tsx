@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
-  Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag, MapPin,
+  Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag, MapPin, Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
@@ -24,6 +24,7 @@ const navItems: {
   { href: '/users',      label: 'Users',       icon: Users },
   { href: '/orders',     label: 'Orders',      icon: ShoppingBag },
   { href: '/printers',   label: 'Printers',    icon: Printer },
+  { href: '/drivers',    label: 'Drivers',     icon: Truck },
   { href: '/payments',   label: 'Payments',    icon: CreditCard },
   { href: '/products',   label: 'Products',    icon: Package },
   { href: '/product-requests', label: 'Product requests', icon: Inbox, badgeKey: 'productRequests' },

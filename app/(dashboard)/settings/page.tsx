@@ -6,8 +6,16 @@ import StarterKit from '@tiptap/starter-kit'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 
-const CONTENT_KEY = 'printer_legal_terms'
+const CONTENT_KEYS = {
+  printer_legal_terms: 'Printer Legal Terms',
+  driver_legal_terms: 'Driver Legal Terms',
+} as const
+
+type ContentKey = keyof typeof CONTENT_KEYS
 
 function ToolbarButton({
   onClick, active, disabled, children,
@@ -34,6 +42,7 @@ function ToolbarButton({
 }
 
 export default function SettingsPage() {
+  const [contentKey, setContentKey] = useState<ContentKey>('printer_legal_terms')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -66,15 +75,16 @@ export default function SettingsPage() {
     if (!editor) return
     setLoading(true)
     setSaved(false)
+    setShowHtml(false)
     try {
-      const res = await api.get<{ key: string; value: string | null }>(`/admin/settings/${CONTENT_KEY}`)
+      const res = await api.get<{ key: string; value: string | null }>(`/admin/settings/${contentKey}`)
       editor.commands.setContent(res.value ?? '')
     } catch {
       editor.commands.setContent('')
     } finally {
       setLoading(false)
     }
-  }, [editor])
+  }, [editor, contentKey])
 
   useEffect(() => {
     if (editor) loadContent()
@@ -84,7 +94,7 @@ export default function SettingsPage() {
     if (!editor) return
     setSaving(true)
     try {
-      await api.post('/admin/settings', { key: CONTENT_KEY, value: editor.getHTML() })
+      await api.post('/admin/settings', { key: contentKey, value: editor.getHTML() })
       setSaved(true)
       toast.success('Settings saved')
       setTimeout(() => setSaved(false), 2000)
@@ -99,9 +109,21 @@ export default function SettingsPage() {
     <div className="p-6 space-y-6 max-w-4xl">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Content Settings</h1>
-        <Button onClick={handleSave} disabled={saving || loading}>
-          {saving ? 'Saving…' : saved ? 'Saved!' : 'Save'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={contentKey} onValueChange={(v) => setContentKey(v as ContentKey)}>
+            <SelectTrigger className="w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(CONTENT_KEYS).map(([key, label]) => (
+                <SelectItem key={key} value={key}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={handleSave} disabled={saving || loading}>
+            {saving ? 'Saving…' : saved ? 'Saved!' : 'Save'}
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-lg border bg-card overflow-hidden">
@@ -163,7 +185,7 @@ export default function SettingsPage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Editing: <strong>Printer Legal Terms</strong> — stored as HTML
+        Editing: <strong>{CONTENT_KEYS[contentKey]}</strong> — stored as HTML
       </p>
     </div>
   )
