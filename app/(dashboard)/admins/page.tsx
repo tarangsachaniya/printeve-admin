@@ -9,6 +9,7 @@ import { validatePassword } from '@/lib/password'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -180,7 +181,7 @@ export default function AdminsPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Password</Label>
-              <Input type="password" value={form.password} onChange={(e) => { setForm(f => ({ ...f, password: e.target.value })); setPwError('') }} />
+              <PasswordInput value={form.password} onChange={(e) => { setForm(f => ({ ...f, password: e.target.value })); setPwError('') }} />
               {pwError && <p className="text-xs text-destructive">{pwError}</p>}
             </div>
             <div className="space-y-1.5">

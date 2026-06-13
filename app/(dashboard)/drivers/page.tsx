@@ -11,6 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -265,7 +266,7 @@ export default function DriversPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Password <span className="text-destructive">*</span></Label>
-              <Input type="password" value={form.password} onChange={(e) => { setForm(f => ({ ...f, password: e.target.value })); setPwError('') }} placeholder="Min. 8 chars, uppercase, number, symbol" />
+              <PasswordInput value={form.password} onChange={(e) => { setForm(f => ({ ...f, password: e.target.value })); setPwError('') }} placeholder="Min. 8 chars, uppercase, number, symbol" />
               {pwError && <p className="text-xs text-destructive">{pwError}</p>}
             </div>
           </div>
@@ -293,8 +294,7 @@ export default function DriversPage() {
           </DialogHeader>
           <div className="py-2 space-y-1.5">
             <Label>New password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={resetPw}
               onChange={e => { setResetPw(e.target.value); setResetPwError('') }}
               placeholder="Min. 8 chars, uppercase, number, symbol"
