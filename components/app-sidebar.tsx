@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
   Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag, MapPin, Truck,
+  ChevronDown, LayoutGrid,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
@@ -14,26 +15,111 @@ import { api } from '@/lib/api'
 import { invalidatePaperCache } from '@/lib/paper-cache'
 import { toast } from 'sonner'
 
-const navItems: {
+type NavItem = {
   href: string
   label: string
   icon: React.ComponentType<{ className?: string }>
   badgeKey?: 'productRequests' | 'priceRequests'
-}[] = [
-  { href: '/dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
-  { href: '/users',      label: 'Users',       icon: Users },
-  { href: '/orders',     label: 'Orders',      icon: ShoppingBag },
-  { href: '/printers',   label: 'Printers',    icon: Printer },
-  { href: '/drivers',    label: 'Drivers',     icon: Truck },
-  { href: '/payments',   label: 'Payments',    icon: CreditCard },
-  { href: '/products',   label: 'Products',    icon: Package },
+  superAdminOnly?: boolean
+}
+
+const topNavItems: NavItem[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+]
+
+const customerNavItems: NavItem[] = [
+  { href: '/users',    label: 'Users',    icon: Users },
+  { href: '/printers', label: 'Printers', icon: Printer },
+  { href: '/drivers',  label: 'Drivers',  icon: Truck },
+  { href: '/admins',   label: 'Admins',   icon: ShieldCheck, superAdminOnly: true },
+]
+
+const productNavItems: NavItem[] = [
+  { href: '/categories', label: 'Categories', icon: LayoutGrid },
+  { href: '/products',   label: 'Products',   icon: Package },
   { href: '/product-requests', label: 'Product requests', icon: Inbox, badgeKey: 'productRequests' },
   { href: '/product-price-requests', label: 'Price requests', icon: Tag, badgeKey: 'priceRequests' },
-  { href: '/paper',      label: 'Paper',       icon: Layers },
-  { href: '/cities',    label: 'Cities',      icon: MapPin },
-  { href: '/reports',    label: 'Reports',     icon: BarChart2 },
-  { href: '/settings',  label: 'Settings',    icon: Settings },
+  { href: '/paper',  label: 'Paper',  icon: Layers },
+  { href: '/cities', label: 'Cities', icon: MapPin },
 ]
+
+const otherNavItems: NavItem[] = [
+  { href: '/orders',   label: 'Orders',   icon: ShoppingBag },
+  { href: '/payments', label: 'Payments', icon: CreditCard },
+  { href: '/reports',  label: 'Reports',  icon: BarChart2 },
+  { href: '/settings', label: 'Settings', icon: Settings },
+]
+
+function NavLink({
+  href, label, icon: Icon, badge, active,
+}: {
+  href: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  badge?: number
+  active: boolean
+}) {
+  return (
+    <Link
+      href={href}
+      prefetch={false}
+      className={cn(
+        'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+        active
+          ? 'bg-primary text-primary-foreground'
+          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className="flex-1">{label}</span>
+      {!!badge && badge > 0 && (
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-white">
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
+    </Link>
+  )
+}
+
+function NavGroup({
+  label, items, pathname, badges, defaultOpen = true,
+}: {
+  label: string
+  items: NavItem[]
+  pathname: string
+  badges: Record<string, number>
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  if (items.length === 0) return null
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="flex w-full items-center justify-between rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {label}
+        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', !open && '-rotate-90')} />
+      </button>
+      {open && (
+        <div className="space-y-1">
+          {items.map(({ href, label: itemLabel, icon, badgeKey }) => (
+            <NavLink
+              key={href}
+              href={href}
+              label={itemLabel}
+              icon={icon}
+              badge={badgeKey ? badges[badgeKey] : undefined}
+              active={pathname === href}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function AppSidebar() {
   const pathname = usePathname()
@@ -79,49 +165,32 @@ export function AppSidebar() {
         <span className="font-bold text-lg tracking-tight">PrintEve</span>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {navItems.map(({ href, label, icon: Icon, badgeKey }) => {
-          const badge = badgeKey === 'productRequests' ? pendingRequests
-            : badgeKey === 'priceRequests' ? pendingPriceRequests
-            : 0
-          return (
-            <Link
-              key={href}
-              href={href}
-              prefetch={false}
-              className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                pathname === href
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              <span className="flex-1">{label}</span>
-              {badge > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-white">
-                  {badge > 9 ? '9+' : badge}
-                </span>
-              )}
-            </Link>
-          )
-        })}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-3 no-scrollbar">
+        <div className="space-y-1">
+          {topNavItems.map(({ href, label, icon }) => (
+            <NavLink key={href} href={href} label={label} icon={icon} active={pathname === href} />
+          ))}
+        </div>
 
-        {isSuperAdmin && (
-          <Link
-            href="/admins"
-            prefetch={false}
-            className={cn(
-              'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-              pathname === '/admins'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            <ShieldCheck className="h-4 w-4 shrink-0" />
-            Admins
-          </Link>
-        )}
+        <NavGroup
+          label="Customers"
+          items={customerNavItems.filter(item => !item.superAdminOnly || isSuperAdmin)}
+          pathname={pathname}
+          badges={{ productRequests: pendingRequests, priceRequests: pendingPriceRequests }}
+        />
+
+        <NavGroup
+          label="Products"
+          items={productNavItems}
+          pathname={pathname}
+          badges={{ productRequests: pendingRequests, priceRequests: pendingPriceRequests }}
+        />
+
+        <div className="space-y-1">
+          {otherNavItems.map(({ href, label, icon }) => (
+            <NavLink key={href} href={href} label={label} icon={icon} active={pathname === href} />
+          ))}
+        </div>
 
         <button
           type="button"

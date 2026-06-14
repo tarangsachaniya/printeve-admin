@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/sheet'
 import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
 import { PriceCalculatorModal } from '@/components/price-calculator-modal'
+import { uploadToCloudinary } from '@/lib/cloudinary'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import Link from 'next/link'
 
@@ -156,56 +157,19 @@ interface PaperTypeOption {
 
 type OptionEntry = { id: string; name: string; price_modifier: string }
 type QtySlab = { min_qty: string; max_qty: string; price_modifier: string; max_completion_minutes: string }
+interface Category { id: string; name: string; slug: string }
 interface City { id: string; name: string; state: string }
 type CityPricingEntry = { id?: string; city_id: string; city_name: string; price_modifier: string }
-
-const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? ''
-const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? ''
-
-function toWebP(file: File): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = img.naturalWidth
-      canvas.height = img.naturalHeight
-      canvas.getContext('2d')!.drawImage(img, 0, 0)
-      URL.revokeObjectURL(url)
-      canvas.toBlob(b => b ? resolve(b) : reject(new Error('WebP conversion failed')), 'image/webp', 0.85)
-    }
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')) }
-    img.src = url
-  })
-}
-
-async function uploadToCloudinary(file: File, type: 'image' | 'video'): Promise<string> {
-  if (!CLOUD_NAME || !UPLOAD_PRESET)
-    throw new Error('Cloudinary is not configured (check NEXT_PUBLIC_CLOUDINARY_* env vars)')
-
-  const fd = new FormData()
-  if (type === 'image') {
-    const webp = await toWebP(file)
-    fd.append('file', webp, file.name.replace(/\.[^.]+$/, '.webp'))
-  } else {
-    fd.append('file', file)
-  }
-  fd.append('upload_preset', UPLOAD_PRESET)
-  fd.append('folder', 'printEve/products')
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${type}/upload`, {
-    method: 'POST',
-    body: fd,
-  })
-  const data = await res.json() as { secure_url?: string; error?: { message: string } }
-  if (!res.ok) throw new Error(data.error?.message ?? 'Cloudinary upload failed')
-  return data.secure_url!
-}
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [paperSizes, setPaperSizes] = useState<PaperSize[]>([])
   const [paperQualities, setPaperQualities] = useState<PaperQuality[]>([])
   const [paperTypeOptions, setPaperTypeOptions] = useState<PaperTypeOption[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [categoryId, setCategoryId] = useState('')
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [addingCategory, setAddingCategory] = useState(false)
   const [cities, setCities] = useState<City[]>([])
   const [cityPricing, setCityPricing] = useState<CityPricingEntry[]>([])
   const originalCityPricingRef = useRef<CityPricingEntry[]>([])
@@ -258,6 +222,7 @@ export default function ProductsPage() {
 
   function resetForm() {
     setName(''); setBasePrice('')
+    setCategoryId(''); setNewCategoryName('')
     setPaperSizesSel([]); setPaperQualitiesSel([]); setPaperTypesSel([]); setQtySlabs([])
     setPendingSize(''); setPendingQuality(''); setPendingType('')
     setImages([]); setVideoUrl('')
@@ -267,7 +232,7 @@ export default function ProductsPage() {
 
   type ProductsResponse = {
     items: Product[]
-    meta: { sizes: PaperSize[]; qualities: PaperQuality[]; types: PaperTypeOption[]; cities: City[] }
+    meta: { sizes: PaperSize[]; qualities: PaperQuality[]; types: PaperTypeOption[]; cities: City[]; categories: Category[] }
   }
 
   function load() {
@@ -286,6 +251,7 @@ export default function ProductsPage() {
         )
         setPaperTypeOptions(res.meta?.types ?? [])
         setCities(res.meta?.cities ?? [])
+        setCategories(res.meta?.categories ?? [])
       })
       .catch((err) => toast.error(err.message ?? 'Failed to load products'))
       .finally(() => setLoading(false))
@@ -305,6 +271,8 @@ export default function ProductsPage() {
     setEditing(p)
     setName(p.name)
     setBasePrice(String(p.base_price))
+    setCategoryId(p.category_id ?? '')
+    setNewCategoryName('')
     setPaperSizesSel((p.paper_sizes ?? []).map(s => ({ id: s.paper_size_id, name: s.name, price_modifier: String(s.price_modifier) })))
     setPaperQualitiesSel((p.paper_qualities ?? []).map(q => ({ id: q.paper_quality_id, name: q.name, price_modifier: String(q.price_modifier) })))
     setPaperTypesSel((p.paper_types ?? []).map(t => ({ id: t.paper_type_id, name: t.name, price_modifier: String(t.price_modifier) })))
@@ -382,12 +350,29 @@ export default function ProductsPage() {
     if (file) uploadVideoFile(file)
   }
 
+  async function addCategory() {
+    const val = newCategoryName.trim()
+    if (!val) return
+    setAddingCategory(true)
+    try {
+      const res = await api.post<{ data: Category }>('/admin/categories', { name: val })
+      if (res.data) {
+        setCategories(prev => [...prev, res.data])
+        setCategoryId(res.data.id)
+      }
+      setNewCategoryName('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add category')
+    } finally { setAddingCategory(false) }
+  }
+
   async function handleSave() {
     setSaving(true)
     try {
       const body = {
         name,
         base_price: Number(basePrice),
+        category_id: categoryId || null,
         description: descEditor?.getHTML() ?? null,
         paper_sizes: paperSizesSel.map(s => ({ paper_size_id: s.id, price_modifier: Number(s.price_modifier) || 0 })),
         paper_qualities: paperQualitiesSel.map(q => ({ paper_quality_id: q.id, price_modifier: Number(q.price_modifier) || 0 })),
@@ -581,6 +566,28 @@ export default function ProductsPage() {
               <div className="space-y-1.5">
                 <Label>Base Price (₹) <span className="text-destructive">*</span></Label>
                 <Input type="number" value={basePrice} onChange={e => setBasePrice(e.target.value)} placeholder="0" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Category</Label>
+                <Combobox
+                  options={categories.map(c => ({ value: c.id, label: c.name }))}
+                  value={categoryId}
+                  onValueChange={setCategoryId}
+                  placeholder="Select category…"
+                  searchPlaceholder="Search categories…"
+                />
+                <div className="flex items-center gap-2 pt-1">
+                  <Input
+                    className="flex-1"
+                    placeholder="Add new category…"
+                    value={newCategoryName}
+                    onChange={e => setNewCategoryName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCategory())}
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={addCategory} disabled={addingCategory || !newCategoryName.trim()}>
+                    <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add
+                  </Button>
+                </div>
               </div>
             </section>
 
