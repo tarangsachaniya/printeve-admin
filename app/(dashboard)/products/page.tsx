@@ -115,6 +115,95 @@ function VariantOptionEditor({
   )
 }
 
+type CustomFieldOptionEntry = { id: string; name: string; price_modifier: string; is_default: boolean }
+
+interface FieldOptionValue { id: string; value: string; sort_order: number }
+
+interface CategoryFieldDef {
+  id: string
+  sort_order: number
+  is_required: boolean
+  field_definitions: {
+    id: string
+    key: string
+    label: string
+    field_type: 'select' | 'multi_select' | 'boolean' | 'number' | 'text'
+    field_option_values: FieldOptionValue[]
+  } | null
+}
+
+function CustomFieldOptionsEditor({
+  field, isRequired, entries, available, pending, setPending, onAdd, onUpdate, onRemove, onSetDefault,
+}: {
+  field: NonNullable<CategoryFieldDef['field_definitions']>
+  isRequired: boolean
+  entries: CustomFieldOptionEntry[]
+  available: { id: string; name: string }[]
+  pending: string
+  setPending: (v: string) => void
+  onAdd: (id: string) => void
+  onUpdate: (i: number, value: string) => void
+  onRemove: (i: number) => void
+  onSetDefault: (i: number) => void
+}) {
+  const hasOptions = available.length > 0 || entries.length > 0
+  const showDefault = field.field_type === 'select' || field.field_type === 'boolean'
+  return (
+    <section className="space-y-3">
+      <SectionHeader
+        label={field.label + (isRequired ? ' *' : '')}
+        description={`Select which "${field.label}" options apply to this product. For each, enter how much to add (+) or subtract (-) from the base price per unit. Leave blank or enter 0 for no extra charge.`}
+      />
+      {!hasOptions ? (
+        <p className="text-sm text-muted-foreground">
+          No options configured for this field.{' '}
+          <Link href="/categories" className="text-primary underline-offset-4 hover:underline">Manage category fields</Link>
+        </p>
+      ) : (
+        <Combobox
+          options={available.map(o => ({ value: o.id, label: o.name }))}
+          value={pending}
+          onValueChange={v => { setPending(v); onAdd(v) }}
+          placeholder={`Select ${field.label.toLowerCase()}…`}
+          searchPlaceholder="Search…"
+          disabled={available.length === 0}
+        />
+      )}
+      {available.length === 0 && entries.length > 0 && (
+        <p className="text-xs text-muted-foreground">All configured options are added.</p>
+      )}
+      {entries.length > 0 && (
+        <div className="rounded-md border divide-y">
+          {entries.map((e, i) => (
+            <div key={e.id} className="flex items-center gap-3 px-3 py-2">
+              {showDefault && (
+                <input
+                  type="radio"
+                  className="h-3.5 w-3.5 accent-primary shrink-0"
+                  checked={e.is_default}
+                  onChange={() => onSetDefault(i)}
+                  title="Default option"
+                />
+              )}
+              <span className="text-sm font-medium w-28 shrink-0 truncate">{e.name}</span>
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">+/- ₹</span>
+                <Input type="number" step={0.05} className="pl-12" placeholder="0" value={e.price_modifier} onChange={ev => onUpdate(i, ev.target.value)} />
+              </div>
+              <Button variant="ghost" size="icon-sm" onClick={() => onRemove(i)}>
+                <XIcon className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+      {showDefault && entries.length > 0 && (
+        <p className="text-xs text-muted-foreground">The radio button marks the default option used when the customer doesn&apos;t make a selection.</p>
+      )}
+    </section>
+  )
+}
+
 interface QuantitySlab {
   min_qty: number
   max_qty: number | null
@@ -134,6 +223,14 @@ interface Product {
   quantity_slabs?: QuantitySlab[]
   images?: string[]
   video_url?: string | null
+  custom_fields?: {
+    category_field_id: string
+    key: string
+    label: string
+    field_type: 'select' | 'multi_select' | 'boolean' | 'number' | 'text'
+    is_required: boolean
+    options: { id: string; name: string; price_modifier: number; is_default: boolean }[]
+  }[]
 }
 
 interface PaperSize {
@@ -190,6 +287,10 @@ export default function ProductsPage() {
   const [pendingQuality, setPendingQuality] = useState('')
   const [pendingType, setPendingType] = useState('')
 
+  const [categoryFields, setCategoryFields] = useState<CategoryFieldDef[]>([])
+  const [customFieldSel, setCustomFieldSel] = useState<Record<string, CustomFieldOptionEntry[]>>({})
+  const [customFieldPending, setCustomFieldPending] = useState<Record<string, string>>({})
+
   const [showDescHtml, setShowDescHtml] = useState(false)
   const [descHtmlValue, setDescHtmlValue] = useState('')
 
@@ -227,6 +328,7 @@ export default function ProductsPage() {
     setPendingSize(''); setPendingQuality(''); setPendingType('')
     setImages([]); setVideoUrl('')
     setCityPricing([]); originalCityPricingRef.current = []
+    setCustomFieldSel({}); setCustomFieldPending({})
     descEditor?.commands.setContent('')
   }
 
@@ -259,6 +361,13 @@ export default function ProductsPage() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    if (!categoryId) { setCategoryFields([]); return }
+    api.get<{ items: CategoryFieldDef[] }>(`/admin/categories/${categoryId}/fields`)
+      .then(res => setCategoryFields(res.items ?? []))
+      .catch(() => setCategoryFields([]))
+  }, [categoryId])
+
   const availableSizes = paperSizes.filter(s => !paperSizesSel.some(x => x.id === s.id))
   const availableQualities = paperQualities.filter(q => !paperQualitiesSel.some(x => x.id === q.id))
   const availableTypes = paperTypeOptions.filter(t => !paperTypesSel.some(x => x.id === t.id))
@@ -284,6 +393,14 @@ export default function ProductsPage() {
     })))
     setImages(p.images ?? [])
     setVideoUrl(p.video_url ?? '')
+    const customSel: Record<string, CustomFieldOptionEntry[]> = {}
+    for (const cf of p.custom_fields ?? []) {
+      customSel[cf.category_field_id] = cf.options.map(o => ({
+        id: o.id, name: o.name, price_modifier: String(o.price_modifier), is_default: o.is_default,
+      }))
+    }
+    setCustomFieldSel(customSel)
+    setCustomFieldPending({})
     setPendingSize(''); setPendingQuality(''); setPendingType('')
     descEditor?.commands.setContent(p.description ?? '')
     setCityPricing([]); originalCityPricingRef.current = []
@@ -383,6 +500,14 @@ export default function ProductsPage() {
           price_modifier: Number(s.price_modifier) || 0,
           max_completion_minutes: s.max_completion_minutes ? Number(s.max_completion_minutes) : null,
         })),
+        custom_field_options: Object.entries(customFieldSel).flatMap(([categoryFieldId, entries]) =>
+          entries.map(e => ({
+            category_field_id: categoryFieldId,
+            field_option_value_id: e.id,
+            price_modifier: Number(e.price_modifier) || 0,
+            is_default: Boolean(e.is_default),
+          }))
+        ),
         images,
         video_url: videoUrl || null,
       }
@@ -436,6 +561,37 @@ export default function ProductsPage() {
 
   function removeOption(setEntries: React.Dispatch<React.SetStateAction<OptionEntry[]>>, i: number) {
     setEntries(prev => prev.filter((_, j) => j !== i))
+  }
+
+  function addCustomFieldOption(categoryFieldId: string, available: FieldOptionValue[], optionValueId: string) {
+    const opt = available.find(o => o.id === optionValueId)
+    if (!opt) return
+    setCustomFieldSel(prev => {
+      const entries = prev[categoryFieldId] ?? []
+      if (entries.some(e => e.id === opt.id)) return prev
+      return { ...prev, [categoryFieldId]: [...entries, { id: opt.id, name: opt.value, price_modifier: '', is_default: entries.length === 0 }] }
+    })
+  }
+
+  function updateCustomFieldModifier(categoryFieldId: string, i: number, price_modifier: string) {
+    setCustomFieldSel(prev => ({
+      ...prev,
+      [categoryFieldId]: (prev[categoryFieldId] ?? []).map((e, j) => j === i ? { ...e, price_modifier } : e),
+    }))
+  }
+
+  function removeCustomFieldOption(categoryFieldId: string, i: number) {
+    setCustomFieldSel(prev => ({
+      ...prev,
+      [categoryFieldId]: (prev[categoryFieldId] ?? []).filter((_, j) => j !== i),
+    }))
+  }
+
+  function setCustomFieldDefault(categoryFieldId: string, i: number) {
+    setCustomFieldSel(prev => ({
+      ...prev,
+      [categoryFieldId]: (prev[categoryFieldId] ?? []).map((e, j) => ({ ...e, is_default: j === i })),
+    }))
   }
 
   function updateSlab(i: number, field: keyof QtySlab, value: string) {
@@ -588,6 +744,14 @@ export default function ProductsPage() {
                     <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add
                   </Button>
                 </div>
+                {categoryId && (
+                  <p className="text-xs text-muted-foreground pt-1">
+                    <Link href={`/categories/${categoryId}/fields`} className="text-primary underline-offset-4 hover:underline">
+                      Manage fields for this category
+                    </Link>
+                    {' '}(Finish, Binding, Lamination, etc.)
+                  </p>
+                )}
               </div>
             </section>
 
@@ -745,6 +909,45 @@ export default function ProductsPage() {
               onRemove={i => removeOption(setPaperTypesSel, i)}
               comboboxPlaceholder="Select paper type…"
             />
+
+            {/* ── Category-Specific Fields ── */}
+            {categoryFields
+              .filter(cf => cf.field_definitions && ['select', 'multi_select', 'boolean'].includes(cf.field_definitions.field_type))
+              .map(cf => {
+                const fieldDef = cf.field_definitions!
+                const entries = customFieldSel[cf.id] ?? []
+                const available = fieldDef.field_option_values.filter(v => !entries.some(e => e.id === v.id))
+                return (
+                  <CustomFieldOptionsEditor
+                    key={cf.id}
+                    field={fieldDef}
+                    isRequired={cf.is_required}
+                    entries={entries}
+                    available={available.map(v => ({ id: v.id, name: v.value }))}
+                    pending={customFieldPending[cf.id] ?? ''}
+                    setPending={v => setCustomFieldPending(prev => ({ ...prev, [cf.id]: v }))}
+                    onAdd={id => addCustomFieldOption(cf.id, fieldDef.field_option_values, id)}
+                    onUpdate={(i, v) => updateCustomFieldModifier(cf.id, i, v)}
+                    onRemove={i => removeCustomFieldOption(cf.id, i)}
+                    onSetDefault={i => setCustomFieldDefault(cf.id, i)}
+                  />
+                )
+              })}
+            {categoryFields.some(cf => cf.field_definitions && ['number', 'text'].includes(cf.field_definitions.field_type)) && (
+              <section className="space-y-3">
+                <SectionHeader
+                  label="Additional Customer Inputs"
+                  description="These fields are shown to customers on the product page but do not affect price."
+                />
+                <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
+                  {categoryFields
+                    .filter(cf => cf.field_definitions && ['number', 'text'].includes(cf.field_definitions.field_type))
+                    .map(cf => (
+                      <li key={cf.id}>{cf.field_definitions!.label}{cf.is_required ? ' (required)' : ''}</li>
+                    ))}
+                </ul>
+              </section>
+            )}
 
             {/* ── Quantity Slabs ── */}
             <section className="space-y-3">

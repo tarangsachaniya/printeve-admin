@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { PlusIcon, Trash2Icon, PencilIcon, UploadIcon, XIcon } from 'lucide-react'
+import Link from 'next/link'
+import { PlusIcon, Trash2Icon, PencilIcon, UploadIcon, XIcon, ListIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { uploadToCloudinary } from '@/lib/cloudinary'
@@ -164,6 +165,13 @@ export default function CategoriesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <Link
+                        href={`/categories/${category.id}/fields`}
+                        title="Manage fields"
+                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                      >
+                        <ListIcon className="h-4 w-4" />
+                      </Link>
                       <button
                         onClick={() => openEdit(category)}
                         className="text-muted-foreground hover:text-foreground transition-colors p-1"
