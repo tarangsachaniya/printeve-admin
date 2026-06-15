@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
   Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag, MapPin, Truck,
-  ChevronDown, LayoutGrid,
+  ChevronDown, LayoutGrid, TicketPercent,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
@@ -44,10 +44,11 @@ const productNavItems: NavItem[] = [
 ]
 
 const otherNavItems: NavItem[] = [
-  { href: '/orders',   label: 'Orders',   icon: ShoppingBag },
-  { href: '/payments', label: 'Payments', icon: CreditCard },
-  { href: '/reports',  label: 'Reports',  icon: BarChart2 },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/orders',      label: 'Orders',      icon: ShoppingBag },
+  { href: '/payments',    label: 'Payments',    icon: CreditCard },
+  { href: '/promo-codes', label: 'Promo Codes', icon: TicketPercent },
+  { href: '/reports',     label: 'Reports',     icon: BarChart2 },
+  { href: '/settings',    label: 'Settings',    icon: Settings },
 ]
 
 function NavLink({

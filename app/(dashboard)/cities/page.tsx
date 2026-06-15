@@ -21,6 +21,7 @@ interface City {
   name: string
   state: string
   is_active: boolean
+  price: number | null
   sort_order: number
 }
 
@@ -29,10 +30,11 @@ export default function CitiesPage() {
   const [newName, setNewName] = useState('')
   const [adding,  setAdding]  = useState(false)
 
-  const [editCity,  setEditCity]  = useState<City | null>(null)
-  const [editName,  setEditName]  = useState('')
+  const [editCity,   setEditCity]   = useState<City | null>(null)
+  const [editName,   setEditName]   = useState('')
   const [editActive, setEditActive] = useState(true)
-  const [saving,   setSaving]   = useState(false)
+  const [editPrice,  setEditPrice]  = useState<string>('')
+  const [saving,     setSaving]     = useState(false)
 
   function load() {
     api.get<{ items: City[] }>('/admin/cities')
@@ -59,6 +61,7 @@ export default function CitiesPage() {
     setEditCity(city)
     setEditName(city.name)
     setEditActive(city.is_active)
+    setEditPrice(city.price != null ? String(city.price) : '')
   }
 
   async function saveEdit() {
@@ -68,6 +71,7 @@ export default function CitiesPage() {
       await api.patch(`/admin/cities/${editCity.id}`, {
         name:      editName.trim(),
         is_active: editActive,
+        price:     editPrice.trim() !== '' ? Number(editPrice) : null,
       })
       setEditCity(null)
       load()
@@ -114,6 +118,7 @@ export default function CitiesPage() {
                 <TableHead>City Name</TableHead>
                 <TableHead>State</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Delivery Price</TableHead>
                 <TableHead className="w-20 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -127,6 +132,9 @@ export default function CitiesPage() {
                     <Badge variant={city.is_active ? 'default' : 'secondary'}>
                       {city.is_active ? 'Active' : 'Inactive'}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {city.price != null ? `₹${city.price}` : '—'}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -148,7 +156,7 @@ export default function CitiesPage() {
               ))}
               {cities.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8 text-sm">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8 text-sm">
                     No cities yet
                   </TableCell>
                 </TableRow>
@@ -184,6 +192,18 @@ export default function CitiesPage() {
               <Label htmlFor="edit-active" className="cursor-pointer">
                 Active — show in city pricing dropdowns
               </Label>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-price">Delivery Price (₹)</Label>
+              <Input
+                id="edit-price"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Leave blank for no charge"
+                value={editPrice}
+                onChange={e => setEditPrice(e.target.value)}
+              />
             </div>
           </div>
           <DialogFooter>
