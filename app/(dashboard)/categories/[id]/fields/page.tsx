@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeftIcon, ArrowUpIcon, ArrowDownIcon, PlusIcon, Trash2Icon } from 'lucide-react'
+import { ArrowLeftIcon, ArrowUpIcon, ArrowDownIcon, PlusIcon, Trash2Icon, SettingsIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Combobox } from '@/components/ui/combobox'
 import { Card, CardContent } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 interface FieldOptionValue { id: string; value: string; sort_order: number }
 interface FieldDefinition {
@@ -45,6 +46,10 @@ export default function CategoryFieldsPage() {
   const [newType, setNewType] = useState<typeof FIELD_TYPES[number]>('select')
   const [newOptions, setNewOptions] = useState('')
   const [creatingDef, setCreatingDef] = useState(false)
+
+  const [optionsField, setOptionsField] = useState<FieldDefinition | null>(null)
+  const [newOptionValue, setNewOptionValue] = useState('')
+  const [savingOption, setSavingOption] = useState(false)
 
   function load() {
     api.get<{ items: Category[] }>('/admin/categories')
@@ -134,6 +139,77 @@ export default function CategoryFieldsPage() {
     } finally { setCreatingDef(false) }
   }
 
+  async function refreshOptions(fieldDefinitionId: string) {
+    try {
+      const res = await api.get<{ items: FieldDefinition[] }>('/admin/field-definitions')
+      const items = res.items ?? []
+      setCatalog(items)
+      setOptionsField(items.find(f => f.id === fieldDefinitionId) ?? null)
+      setFields(prev => prev.map(f =>
+        f.field_definitions?.id === fieldDefinitionId
+          ? { ...f, field_definitions: items.find(i => i.id === fieldDefinitionId) ?? f.field_definitions }
+          : f
+      ))
+    } catch {
+      // ignore
+    }
+  }
+
+  async function addOption() {
+    const value = newOptionValue.trim()
+    if (!value || !optionsField) return
+    setSavingOption(true)
+    try {
+      await api.post(`/admin/field-definitions/${optionsField.id}/options`, {
+        value,
+        sort_order: optionsField.field_option_values.length,
+      })
+      setNewOptionValue('')
+      await refreshOptions(optionsField.id)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add option')
+    } finally { setSavingOption(false) }
+  }
+
+  async function updateOption(optionId: string, value: string) {
+    if (!optionsField) return
+    try {
+      await api.put(`/admin/field-definitions/${optionsField.id}/options/${optionId}`, { value })
+      await refreshOptions(optionsField.id)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update option')
+    }
+  }
+
+  async function removeOption(optionId: string) {
+    if (!optionsField) return
+    try {
+      await api.delete(`/admin/field-definitions/${optionsField.id}/options/${optionId}`)
+      await refreshOptions(optionsField.id)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove option')
+    }
+  }
+
+  async function moveOption(option: FieldOptionValue, dir: -1 | 1) {
+    if (!optionsField) return
+    const sorted = [...optionsField.field_option_values].sort((a, b) => a.sort_order - b.sort_order)
+    const idx = sorted.findIndex(o => o.id === option.id)
+    const swapIdx = idx + dir
+    if (swapIdx < 0 || swapIdx >= sorted.length) return
+    const a = sorted[idx]
+    const b = sorted[swapIdx]
+    try {
+      await Promise.all([
+        api.put(`/admin/field-definitions/${optionsField.id}/options/${a.id}`, { sort_order: b.sort_order }),
+        api.put(`/admin/field-definitions/${optionsField.id}/options/${b.id}`, { sort_order: a.sort_order }),
+      ])
+      await refreshOptions(optionsField.id)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to reorder options')
+    }
+  }
+
   return (
     <div className="p-6 space-y-6 max-w-3xl">
       <div className="flex items-center gap-3">
@@ -185,6 +261,15 @@ export default function CategoryFieldsPage() {
                   <input type="checkbox" className="h-3.5 w-3.5 accent-primary" checked={f.is_required} onChange={() => toggleRequired(f)} />
                   Required
                 </label>
+                {f.field_definitions && ['select', 'multi_select', 'boolean'].includes(f.field_definitions.field_type) && (
+                  <button
+                    onClick={() => { setOptionsField(f.field_definitions); setNewOptionValue('') }}
+                    className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                    title="Edit options"
+                  >
+                    <SettingsIcon className="h-4 w-4" />
+                  </button>
+                )}
                 <button onClick={() => removeField(f.id)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
                   <Trash2Icon className="h-4 w-4" />
                 </button>
@@ -234,6 +319,56 @@ export default function CategoryFieldsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      <Dialog open={!!optionsField} onOpenChange={(open) => { if (!open) setOptionsField(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit options{optionsField ? `: ${optionsField.label}` : ''}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {[...(optionsField?.field_option_values ?? [])]
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map((opt, i, sorted) => (
+                <div key={opt.id} className="flex items-center gap-2">
+                  <div className="flex flex-col">
+                    <button onClick={() => moveOption(opt, -1)} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30">
+                      <ArrowUpIcon className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => moveOption(opt, 1)} disabled={i === sorted.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30">
+                      <ArrowDownIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <Input
+                    defaultValue={opt.value}
+                    onBlur={(e) => { if (e.target.value.trim() && e.target.value !== opt.value) updateOption(opt.id, e.target.value.trim()) }}
+                    className="flex-1"
+                  />
+                  <button onClick={() => removeOption(opt.id)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
+                    <Trash2Icon className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            {!optionsField?.field_option_values?.length && (
+              <p className="text-sm text-muted-foreground py-2">No options yet</p>
+            )}
+            <div className="flex items-center gap-2 pt-2">
+              <Input
+                value={newOptionValue}
+                onChange={e => setNewOptionValue(e.target.value)}
+                placeholder="New option value"
+                className="flex-1"
+                onKeyDown={e => { if (e.key === 'Enter') addOption() }}
+              />
+              <Button onClick={addOption} disabled={savingOption || !newOptionValue.trim()}>
+                <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOptionsField(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

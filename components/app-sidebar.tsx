@@ -206,7 +206,9 @@ export function AppSidebar() {
 
       <div className="px-3 py-4 border-t">
         <div className="px-3 py-2 text-xs text-muted-foreground mb-2">
-          {user?.role?.replace('_', ' ').toUpperCase()}
+          {user?.full_name && <p className="text-sm font-medium text-foreground">{user.full_name}</p>}
+          {user?.email && <p className="truncate">{user.email}</p>}
+          <p>{user?.role?.replace('_', ' ').toUpperCase()}</p>
         </div>
         <Button
           variant="ghost"
