@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useDataTable } from '@/lib/use-data-table'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Combobox } from '@/components/ui/combobox'
@@ -21,6 +22,7 @@ import { DataTableSearch, DataTablePagination } from '@/components/data-table-co
 import { PriceCalculatorModal } from '@/components/price-calculator-modal'
 import { uploadToCloudinary } from '@/lib/cloudinary'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import Link from 'next/link'
 
 function SectionHeader({ label, description }: { label: string; description?: string }) {
@@ -216,6 +218,7 @@ interface Product {
   name: string
   base_price: number
   category_id: string
+  is_active: boolean
   description?: string | null
   paper_sizes?: { paper_size_id: string; name: string; price_modifier: number }[]
   paper_qualities?: { paper_quality_id: string; name: string; price_modifier: number }[]
@@ -274,6 +277,9 @@ export default function ProductsPage() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Product | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [togglingActiveId, setTogglingActiveId] = useState<string | null>(null)
 
   const table = useDataTable(products, ['name', 'base_price'] as (keyof Product)[])
 
@@ -531,12 +537,29 @@ export default function ProductsPage() {
   }
 
   async function handleDelete(id: string) {
+    setDeleting(true)
     try {
       await api.delete(`/admin/products/${id}`)
       setProducts(prev => prev.filter(p => p.id !== id))
+      setDeleteId(null)
       toast.success('Product deleted')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete product')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function handleToggleActive(p: Product) {
+    setTogglingActiveId(p.id)
+    try {
+      await api.patch(`/admin/products/${p.id}`, { is_active: !p.is_active })
+      setProducts(prev => prev.map(x => x.id === p.id ? { ...x, is_active: !p.is_active } : x))
+      toast.success(p.is_active ? 'Product disabled' : 'Product enabled')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update product status')
+    } finally {
+      setTogglingActiveId(null)
     }
   }
 
@@ -667,6 +690,7 @@ export default function ProductsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Price</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -675,15 +699,28 @@ export default function ProductsPage() {
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell>₹{p.base_price?.toLocaleString('en-IN')}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.is_active ? 'default' : 'secondary'}>
+                        {p.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-right space-x-2">
                       <Button size="sm" variant="outline" onClick={() => openEdit(p)}>Edit</Button>
-                      <Button size="sm" variant="destructive" onClick={() => handleDelete(p.id)}>Delete</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={togglingActiveId === p.id}
+                        onClick={() => handleToggleActive(p)}
+                      >
+                        {p.is_active ? 'Disable' : 'Enable'}
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => setDeleteId(p.id)}>Delete</Button>
                     </TableCell>
                   </TableRow>
                 ))}
                 {table.rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                       {table.search ? 'No products match your search' : 'No products'}
                     </TableCell>
                   </TableRow>
@@ -1037,6 +1074,15 @@ export default function ProductsPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        onOpenChange={(open) => !open && setDeleteId(null)}
+        title="Delete product?"
+        description="This product will be permanently removed from the catalog."
+        loading={deleting}
+        onConfirm={() => deleteId && handleDelete(deleteId)}
+      />
     </div>
   )
 }

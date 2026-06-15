@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Combobox } from '@/components/ui/combobox'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface FieldOptionValue { id: string; value: string; sort_order: number }
 interface FieldDefinition {
@@ -51,6 +52,11 @@ export default function CategoryFieldsPage() {
   const [newOptionValue, setNewOptionValue] = useState('')
   const [savingOption, setSavingOption] = useState(false)
 
+  const [deleteFieldId, setDeleteFieldId] = useState<string | null>(null)
+  const [removingField, setRemovingField] = useState(false)
+  const [deleteOptionId, setDeleteOptionId] = useState<string | null>(null)
+  const [removingOption, setRemovingOption] = useState(false)
+
   function load() {
     api.get<{ items: Category[] }>('/admin/categories')
       .then(r => setCategory((r.items ?? []).find(c => c.id === categoryId) ?? null))
@@ -86,11 +92,15 @@ export default function CategoryFieldsPage() {
   }
 
   async function removeField(fieldId: string) {
+    setRemovingField(true)
     try {
       await api.delete(`/admin/categories/${categoryId}/fields/${fieldId}`)
+      setDeleteFieldId(null)
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to remove field')
+    } finally {
+      setRemovingField(false)
     }
   }
 
@@ -183,11 +193,15 @@ export default function CategoryFieldsPage() {
 
   async function removeOption(optionId: string) {
     if (!optionsField) return
+    setRemovingOption(true)
     try {
       await api.delete(`/admin/field-definitions/${optionsField.id}/options/${optionId}`)
+      setDeleteOptionId(null)
       await refreshOptions(optionsField.id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to remove option')
+    } finally {
+      setRemovingOption(false)
     }
   }
 
@@ -270,7 +284,7 @@ export default function CategoryFieldsPage() {
                     <SettingsIcon className="h-4 w-4" />
                   </button>
                 )}
-                <button onClick={() => removeField(f.id)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
+                <button onClick={() => setDeleteFieldId(f.id)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
                   <Trash2Icon className="h-4 w-4" />
                 </button>
               </div>
@@ -343,7 +357,7 @@ export default function CategoryFieldsPage() {
                     onBlur={(e) => { if (e.target.value.trim() && e.target.value !== opt.value) updateOption(opt.id, e.target.value.trim()) }}
                     className="flex-1"
                   />
-                  <button onClick={() => removeOption(opt.id)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
+                  <button onClick={() => setDeleteOptionId(opt.id)} className="text-muted-foreground hover:text-destructive transition-colors p-1">
                     <Trash2Icon className="h-4 w-4" />
                   </button>
                 </div>
@@ -369,6 +383,26 @@ export default function CategoryFieldsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteFieldId !== null}
+        onOpenChange={(open) => !open && setDeleteFieldId(null)}
+        title="Remove field?"
+        description="This field will no longer be shown on products in this category."
+        confirmLabel="Remove"
+        loading={removingField}
+        onConfirm={() => deleteFieldId && removeField(deleteFieldId)}
+      />
+
+      <ConfirmDialog
+        open={deleteOptionId !== null}
+        onOpenChange={(open) => !open && setDeleteOptionId(null)}
+        title="Remove option?"
+        description="This option will be permanently removed from the field."
+        confirmLabel="Remove"
+        loading={removingOption}
+        onConfirm={() => deleteOptionId && removeOption(deleteOptionId)}
+      />
     </div>
   )
 }

@@ -20,6 +20,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { RefreshButton } from '@/components/refresh-button'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
 
@@ -42,6 +43,8 @@ export default function AdminsPage() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [pwError, setPwError] = useState('')
+  const [revokeId, setRevokeId] = useState<string | null>(null)
+  const [revoking, setRevoking] = useState(false)
 
   async function load(silent = false) {
     if (!silent) setLoading(true)
@@ -78,12 +81,16 @@ export default function AdminsPage() {
   }
 
   async function handleRevoke(id: string) {
+    setRevoking(true)
     try {
       await api.delete(`/admin/admins/${id}`)
       setAdmins(prev => prev.filter(a => a.id !== id))
+      setRevokeId(null)
       toast.success('Admin access revoked')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to revoke admin')
+    } finally {
+      setRevoking(false)
     }
   }
 
@@ -135,7 +142,7 @@ export default function AdminsPage() {
                     </TableCell>
                     <TableCell>{new Date(a.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="destructive" size="sm" onClick={() => handleRevoke(a.id)}>
+                      <Button variant="destructive" size="sm" onClick={() => setRevokeId(a.id)}>
                         Revoke
                       </Button>
                     </TableCell>
@@ -203,6 +210,16 @@ export default function AdminsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={revokeId !== null}
+        onOpenChange={(open) => !open && setRevokeId(null)}
+        title="Revoke admin access?"
+        description="This admin will permanently lose access to the dashboard."
+        confirmLabel="Revoke"
+        loading={revoking}
+        onConfirm={() => revokeId && handleRevoke(revokeId)}
+      />
     </div>
   )
 }

@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface Category {
   id: string
@@ -40,6 +41,8 @@ export default function CategoriesPage() {
   const [uploadingImage, setUploadingImage] = useState(false)
   const [saving, setSaving] = useState(false)
   const imgInputRef = useRef<HTMLInputElement>(null)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   function load() {
     api.get<{ items: Category[] }>('/admin/categories')
@@ -103,11 +106,15 @@ export default function CategoriesPage() {
   }
 
   async function remove(id: string) {
+    setDeleting(true)
     try {
       await api.delete(`/admin/categories/${id}`)
+      setDeleteId(null)
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete category')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -179,7 +186,7 @@ export default function CategoriesPage() {
                         <PencilIcon className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => remove(category.id)}
+                        onClick={() => setDeleteId(category.id)}
                         className="text-muted-foreground hover:text-destructive transition-colors p-1"
                       >
                         <Trash2Icon className="h-4 w-4" />
@@ -269,6 +276,15 @@ export default function CategoriesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        onOpenChange={(open) => !open && setDeleteId(null)}
+        title="Delete category?"
+        description="This category will be permanently removed. Products using this category may be affected."
+        loading={deleting}
+        onConfirm={() => deleteId && remove(deleteId)}
+      />
     </div>
   )
 }
