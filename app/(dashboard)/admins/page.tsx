@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { getCurrentUser } from '@/lib/auth'
 import { useDataTable } from '@/lib/use-data-table'
 import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
 import { validatePassword } from '@/lib/password'
@@ -36,6 +37,7 @@ interface Admin {
 const emptyForm = { full_name: '', email: '', phone: '', password: '', role: 'admin' as 'admin' | 'super_admin' }
 
 export default function AdminsPage() {
+  const isSuperAdmin = getCurrentUser()?.role === 'super_admin'
   const [admins, setAdmins] = useState<Admin[]>([])
   const [loading, setLoading] = useState(true)
   const table = useDataTable(admins, ['full_name', 'email', 'role', 'status'] as (keyof Admin)[])
@@ -45,12 +47,16 @@ export default function AdminsPage() {
   const [pwError, setPwError] = useState('')
   const [revokeId, setRevokeId] = useState<string | null>(null)
   const [revoking, setRevoking] = useState(false)
+  const [resetTarget, setResetTarget] = useState<Admin | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [resetPwError, setResetPwError] = useState('')
+  const [resetting, setResetting] = useState(false)
 
   async function load(silent = false) {
     if (!silent) setLoading(true)
     try {
-      const res = await api.get<{ data: Admin[] }>('/admin/admins')
-      setAdmins(res.data ?? [])
+      const res = await api.get<Admin[]>('/admin/admins')
+      setAdmins(res ?? [])
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load admins')
     } finally {
@@ -91,6 +97,23 @@ export default function AdminsPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to revoke admin')
     } finally {
       setRevoking(false)
+    }
+  }
+
+  async function handleResetPassword() {
+    const pwErr = validatePassword(newPassword)
+    if (pwErr) { setResetPwError(pwErr); return }
+    setResetPwError('')
+    setResetting(true)
+    try {
+      await api.patch(`/admin/admins/${resetTarget!.id}/password`, { password: newPassword })
+      toast.success('Password reset successfully')
+      setResetTarget(null)
+      setNewPassword('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to reset password')
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -142,9 +165,16 @@ export default function AdminsPage() {
                     </TableCell>
                     <TableCell>{new Date(a.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="destructive" size="sm" onClick={() => setRevokeId(a.id)}>
-                        Revoke
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        {isSuperAdmin && (
+                          <Button variant="outline" size="sm" onClick={() => { setResetTarget(a); setNewPassword(''); setResetPwError('') }}>
+                            Reset Password
+                          </Button>
+                        )}
+                        <Button variant="destructive" size="sm" onClick={() => setRevokeId(a.id)}>
+                          Revoke
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -220,6 +250,28 @@ export default function AdminsPage() {
         loading={revoking}
         onConfirm={() => revokeId && handleRevoke(revokeId)}
       />
+
+      <Dialog open={resetTarget !== null} onOpenChange={(o) => !o && setResetTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password — {resetTarget?.full_name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <Label>New Password</Label>
+            <PasswordInput
+              value={newPassword}
+              onChange={(e) => { setNewPassword(e.target.value); setResetPwError('') }}
+            />
+            {resetPwError && <p className="text-xs text-destructive">{resetPwError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetTarget(null)}>Cancel</Button>
+            <Button onClick={handleResetPassword} disabled={resetting}>
+              {resetting ? 'Saving…' : 'Reset Password'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
