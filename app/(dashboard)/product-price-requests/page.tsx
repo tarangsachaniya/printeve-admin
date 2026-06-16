@@ -41,11 +41,28 @@ interface QuantitySlab {
   max_completion_minutes?: number | null
 }
 
+interface CustomFieldOption {
+  category_field_id?: string
+  field_option_value_id?: string
+  price_modifier: number
+}
+
+interface CurrentCustomField {
+  category_field_id: string
+  label: string
+  options: { id: string; name: string; price_modifier: number }[]
+}
+
 interface VariantConfig {
   paper_sizes: VariantOption[]
   paper_qualities: VariantOption[]
   paper_types: VariantOption[]
   quantity_slabs: QuantitySlab[]
+  custom_field_options?: CustomFieldOption[]
+}
+
+interface CurrentVariantConfig extends VariantConfig {
+  custom_fields?: CurrentCustomField[]
 }
 
 interface RequestDetail {
@@ -53,7 +70,7 @@ interface RequestDetail {
   base_price: number
   current_price: number | null
   variant_config: VariantConfig
-  current_variant_config: VariantConfig
+  current_variant_config: CurrentVariantConfig
   notes?: string | null
   admin_notes?: string | null
   status: string
@@ -63,7 +80,7 @@ interface RequestDetail {
 
 const FILTERS = ['pending', 'approved', 'rejected', ''] as const
 
-const EMPTY_VARIANT_CONFIG: VariantConfig = { paper_sizes: [], paper_qualities: [], paper_types: [], quantity_slabs: [] }
+const EMPTY_VARIANT_CONFIG: CurrentVariantConfig = { paper_sizes: [], paper_qualities: [], paper_types: [], quantity_slabs: [], custom_field_options: [], custom_fields: [] }
 
 function formatModifier(v: number) {
   const n = Number(v)
@@ -232,6 +249,67 @@ function QuantitySlabDiffSection({ rows }: { rows: SlabRow[] }) {
         </Table>
       </div>
     </section>
+  )
+}
+
+function CustomFieldDiffSection({
+  currentFields,
+  requestedOptions,
+}: {
+  currentFields: CurrentCustomField[]
+  requestedOptions: CustomFieldOption[]
+}) {
+  if (currentFields.length === 0 && requestedOptions.length === 0) return null
+
+  const requestedMap = new Map<string, number>()
+  for (const o of requestedOptions) {
+    if (o.field_option_value_id) requestedMap.set(o.field_option_value_id, Number(o.price_modifier))
+  }
+
+  const sections = currentFields.map(cf => ({
+    label: cf.label,
+    rows: cf.options.map(opt => ({
+      key: opt.id,
+      name: opt.name,
+      current: opt.price_modifier,
+      requested: requestedMap.get(opt.id),
+    })),
+  })).filter(s => s.rows.length > 0)
+
+  if (sections.length === 0) return null
+
+  return (
+    <>
+      {sections.map(s => (
+        <section key={s.label} className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{s.label}</p>
+          <div className="rounded-lg border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Option</TableHead>
+                  <TableHead className="text-right">Current</TableHead>
+                  <TableHead className="text-right">Requested</TableHead>
+                  <TableHead className="text-right">Change</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {s.rows.map(r => (
+                  <TableRow key={r.key} className={r.current !== r.requested ? 'bg-primary/5' : undefined}>
+                    <TableCell className="font-medium">{r.name}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatModifier(r.current)}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {r.requested != null ? formatModifier(r.requested) : '—'}
+                    </TableCell>
+                    <TableCell className="text-right"><PriceDelta from={r.current} to={r.requested} /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+      ))}
+    </>
   )
 }
 
@@ -428,6 +506,10 @@ export default function ProductPriceRequestsPage() {
               <VariantDiffSection title="Paper qualities" rows={qualityRows} />
               <VariantDiffSection title="Paper types" rows={typeRows} />
               <QuantitySlabDiffSection rows={slabRows} />
+              <CustomFieldDiffSection
+                currentFields={currentVC.custom_fields ?? []}
+                requestedOptions={requestedVC.custom_field_options ?? []}
+              />
 
               {detail.notes && (
                 <section className="space-y-1.5">
