@@ -42,13 +42,13 @@ interface QuantitySlab {
 }
 
 interface CustomFieldOption {
-  category_field_id?: string
+  product_field_id?: string
   field_option_value_id?: string
   price_modifier: number
 }
 
 interface CurrentCustomField {
-  category_field_id: string
+  product_field_id: string
   label: string
   options: { id: string; name: string; price_modifier: number }[]
 }

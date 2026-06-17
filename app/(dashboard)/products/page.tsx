@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { PlusIcon, VideoIcon, XIcon, UploadIcon, Info } from 'lucide-react'
+import { PlusIcon, VideoIcon, XIcon, UploadIcon, Info, GripVertical, ChevronDown, ChevronUp } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { toast } from 'sonner'
@@ -121,23 +121,29 @@ type CustomFieldOptionEntry = { id: string; name: string; price_modifier: string
 
 interface FieldOptionValue { id: string; value: string; sort_order: number }
 
-interface CategoryFieldDef {
+interface FieldDefCatalog {
   id: string
+  key: string
+  label: string
+  field_type: 'select' | 'multi_select' | 'boolean' | 'number' | 'text' | 'textarea' | 'file_upload' | 'radio'
+  field_option_values: FieldOptionValue[]
+}
+
+interface ProductFieldDef {
+  field_definition_id: string
   sort_order: number
   is_required: boolean
-  field_definitions: {
-    id: string
-    key: string
-    label: string
-    field_type: 'select' | 'multi_select' | 'boolean' | 'number' | 'text'
-    field_option_values: FieldOptionValue[]
-  } | null
+  label: string
+  key: string
+  field_type: FieldDefCatalog['field_type']
+  field_option_values: FieldOptionValue[]
 }
 
 function CustomFieldOptionsEditor({
-  field, isRequired, entries, available, pending, setPending, onAdd, onUpdate, onRemove, onSetDefault,
+  fieldDefId, field, isRequired, entries, available, pending, setPending, onAdd, onUpdate, onRemove, onSetDefault, onToggleRequired,
 }: {
-  field: NonNullable<CategoryFieldDef['field_definitions']>
+  fieldDefId: string
+  field: Pick<FieldDefCatalog, 'label' | 'field_type'>
   isRequired: boolean
   entries: CustomFieldOptionEntry[]
   available: { id: string; name: string }[]
@@ -147,21 +153,20 @@ function CustomFieldOptionsEditor({
   onUpdate: (i: number, value: string) => void
   onRemove: (i: number) => void
   onSetDefault: (i: number) => void
+  onToggleRequired: () => void
 }) {
   const hasOptions = available.length > 0 || entries.length > 0
-  const showDefault = field.field_type === 'select' || field.field_type === 'boolean'
+  const showDefault = field.field_type === 'select' || field.field_type === 'boolean' || field.field_type === 'radio'
   return (
-    <section className="space-y-3">
-      <SectionHeader
-        label={field.label + (isRequired ? ' *' : '')}
-        description={`Select which "${field.label}" options apply to this product. For each, enter how much to add (+) or subtract (-) from the base price per unit. Leave blank or enter 0 for no extra charge.`}
-      />
-      {!hasOptions ? (
-        <p className="text-sm text-muted-foreground">
-          No options configured for this field.{' '}
-          <Link href="/categories" className="text-primary underline-offset-4 hover:underline">Manage category fields</Link>
-        </p>
-      ) : (
+    <div className="rounded-md border p-3 space-y-3 bg-muted/20">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">{field.label}{isRequired ? ' *' : ''}</p>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+          <input type="checkbox" checked={isRequired} onChange={onToggleRequired} className="accent-primary" />
+          Required
+        </label>
+      </div>
+      {hasOptions && (
         <Combobox
           options={available.map(o => ({ value: o.id, label: o.name }))}
           value={pending}
@@ -175,7 +180,7 @@ function CustomFieldOptionsEditor({
         <p className="text-xs text-muted-foreground">All configured options are added.</p>
       )}
       {entries.length > 0 && (
-        <div className="rounded-md border divide-y">
+        <div className="rounded-md border divide-y bg-background">
           {entries.map((e, i) => (
             <div key={e.id} className="flex items-center gap-3 px-3 py-2">
               {showDefault && (
@@ -202,7 +207,7 @@ function CustomFieldOptionsEditor({
       {showDefault && entries.length > 0 && (
         <p className="text-xs text-muted-foreground">The radio button marks the default option used when the customer doesn&apos;t make a selection.</p>
       )}
-    </section>
+    </div>
   )
 }
 
@@ -217,7 +222,6 @@ interface Product {
   id: string
   name: string
   base_price: number
-  category_id: string
   is_active: boolean
   description?: string | null
   paper_sizes?: { paper_size_id: string; name: string; price_modifier: number }[]
@@ -227,49 +231,38 @@ interface Product {
   images?: string[]
   video_url?: string | null
   custom_fields?: {
-    category_field_id: string
+    product_field_id: string
+    field_definition_id: string
     key: string
     label: string
-    field_type: 'select' | 'multi_select' | 'boolean' | 'number' | 'text'
+    field_type: FieldDefCatalog['field_type']
     is_required: boolean
     options: { id: string; name: string; price_modifier: number; is_default: boolean }[]
   }[]
 }
 
-interface PaperSize {
-  id: string
-  name: string
-  sort_order: number
-}
-
-interface PaperQuality {
-  id: string
-  gsm: number
-  label: string | null
-  name: string
-}
-
-interface PaperTypeOption {
-  id: string
-  name: string
-  sort_order: number
-}
-
+interface PaperSize { id: string; name: string; sort_order: number }
+interface PaperQuality { id: string; gsm: number; label: string | null; name: string }
+interface PaperTypeOption { id: string; name: string; sort_order: number }
 type OptionEntry = { id: string; name: string; price_modifier: string }
 type QtySlab = { min_qty: string; max_qty: string; price_modifier: string; max_completion_minutes: string }
-interface Category { id: string; name: string; slug: string }
 interface City { id: string; name: string; state: string }
 type CityPricingEntry = { id?: string; city_id: string; city_name: string; price_modifier: string }
+
+const FIELD_TYPE_LABELS: Record<string, string> = {
+  select: 'Dropdown', multi_select: 'Multi-select', boolean: 'Yes/No',
+  radio: 'Radio', number: 'Number', text: 'Text', textarea: 'Textarea', file_upload: 'File Upload',
+}
+
+const PRICE_AFFECTING_TYPES = new Set(['select', 'multi_select', 'boolean', 'radio'])
+const INPUT_ONLY_TYPES = new Set(['number', 'text', 'textarea', 'file_upload'])
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [paperSizes, setPaperSizes] = useState<PaperSize[]>([])
   const [paperQualities, setPaperQualities] = useState<PaperQuality[]>([])
   const [paperTypeOptions, setPaperTypeOptions] = useState<PaperTypeOption[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
-  const [categoryId, setCategoryId] = useState('')
-  const [newCategoryName, setNewCategoryName] = useState('')
-  const [addingCategory, setAddingCategory] = useState(false)
+  const [fieldDefinitionCatalog, setFieldDefinitionCatalog] = useState<FieldDefCatalog[]>([])
   const [cities, setCities] = useState<City[]>([])
   const [cityPricing, setCityPricing] = useState<CityPricingEntry[]>([])
   const originalCityPricingRef = useRef<CityPricingEntry[]>([])
@@ -293,9 +286,21 @@ export default function ProductsPage() {
   const [pendingQuality, setPendingQuality] = useState('')
   const [pendingType, setPendingType] = useState('')
 
-  const [categoryFields, setCategoryFields] = useState<CategoryFieldDef[]>([])
-  const [customFieldSel, setCustomFieldSel] = useState<Record<string, CustomFieldOptionEntry[]>>({})
+  const [productFields, setProductFields] = useState<ProductFieldDef[]>([])
+  const [customFieldOptionSel, setCustomFieldOptionSel] = useState<Record<string, CustomFieldOptionEntry[]>>({})
   const [customFieldPending, setCustomFieldPending] = useState<Record<string, string>>({})
+  const [pendingFieldDefId, setPendingFieldDefId] = useState('')
+
+  // New field definition creation state
+  const [creatingField, setCreatingField] = useState(false)
+  const [newFieldKey, setNewFieldKey] = useState('')
+  const [newFieldLabel, setNewFieldLabel] = useState('')
+  const [newFieldType, setNewFieldType] = useState<FieldDefCatalog['field_type']>('select')
+  const [newFieldOptions, setNewFieldOptions] = useState('')
+  const [addingFieldDef, setAddingFieldDef] = useState(false)
+
+  // Drag-and-drop state for product fields reordering
+  const dragFieldIndexRef = useRef<number | null>(null)
 
   const [showDescHtml, setShowDescHtml] = useState(false)
   const [descHtmlValue, setDescHtmlValue] = useState('')
@@ -329,18 +334,24 @@ export default function ProductsPage() {
 
   function resetForm() {
     setName(''); setBasePrice('')
-    setCategoryId(''); setNewCategoryName('')
     setPaperSizesSel([]); setPaperQualitiesSel([]); setPaperTypesSel([]); setQtySlabs([])
     setPendingSize(''); setPendingQuality(''); setPendingType('')
     setImages([]); setVideoUrl('')
     setCityPricing([]); originalCityPricingRef.current = []
-    setCustomFieldSel({}); setCustomFieldPending({})
+    setProductFields([]); setCustomFieldOptionSel({}); setCustomFieldPending({}); setPendingFieldDefId('')
+    setCreatingField(false); setNewFieldKey(''); setNewFieldLabel(''); setNewFieldType('select'); setNewFieldOptions('')
     descEditor?.commands.setContent('')
   }
 
   type ProductsResponse = {
     items: Product[]
-    meta: { sizes: PaperSize[]; qualities: PaperQuality[]; types: PaperTypeOption[]; cities: City[]; categories: Category[] }
+    meta: {
+      sizes: PaperSize[]
+      qualities: PaperQuality[]
+      types: PaperTypeOption[]
+      cities: City[]
+      field_definitions: FieldDefCatalog[]
+    }
   }
 
   function load() {
@@ -351,15 +362,13 @@ export default function ProductsPage() {
         setPaperSizes(res.meta?.sizes ?? [])
         setPaperQualities(
           (res.meta?.qualities ?? []).map(q => ({
-            id: q.id,
-            gsm: q.gsm,
-            label: q.label,
+            id: q.id, gsm: q.gsm, label: q.label,
             name: q.label ? `${q.gsm} GSM (${q.label})` : `${q.gsm} GSM`,
           }))
         )
         setPaperTypeOptions(res.meta?.types ?? [])
         setCities(res.meta?.cities ?? [])
-        setCategories(res.meta?.categories ?? [])
+        setFieldDefinitionCatalog(res.meta?.field_definitions ?? [])
       })
       .catch((err) => toast.error(err.message ?? 'Failed to load products'))
       .finally(() => setLoading(false))
@@ -367,16 +376,10 @@ export default function ProductsPage() {
 
   useEffect(() => { load() }, [])
 
-  useEffect(() => {
-    if (!categoryId) { setCategoryFields([]); return }
-    api.get<{ items: CategoryFieldDef[] }>(`/admin/categories/${categoryId}/fields`)
-      .then(res => setCategoryFields(res.items ?? []))
-      .catch(() => setCategoryFields([]))
-  }, [categoryId])
-
   const availableSizes = paperSizes.filter(s => !paperSizesSel.some(x => x.id === s.id))
   const availableQualities = paperQualities.filter(q => !paperQualitiesSel.some(x => x.id === q.id))
   const availableTypes = paperTypeOptions.filter(t => !paperTypesSel.some(x => x.id === t.id))
+  const availableFieldDefs = fieldDefinitionCatalog.filter(fd => !productFields.some(pf => pf.field_definition_id === fd.id))
 
   function openCreate() {
     setEditing(null); resetForm(); setOpen(true)
@@ -386,8 +389,6 @@ export default function ProductsPage() {
     setEditing(p)
     setName(p.name)
     setBasePrice(String(p.base_price))
-    setCategoryId(p.category_id ?? '')
-    setNewCategoryName('')
     setPaperSizesSel((p.paper_sizes ?? []).map(s => ({ id: s.paper_size_id, name: s.name, price_modifier: String(s.price_modifier) })))
     setPaperQualitiesSel((p.paper_qualities ?? []).map(q => ({ id: q.paper_quality_id, name: q.name, price_modifier: String(q.price_modifier) })))
     setPaperTypesSel((p.paper_types ?? []).map(t => ({ id: t.paper_type_id, name: t.name, price_modifier: String(t.price_modifier) })))
@@ -399,23 +400,34 @@ export default function ProductsPage() {
     })))
     setImages(p.images ?? [])
     setVideoUrl(p.video_url ?? '')
-    const customSel: Record<string, CustomFieldOptionEntry[]> = {}
+
+    const fields: ProductFieldDef[] = []
+    const optionSel: Record<string, CustomFieldOptionEntry[]> = {}
     for (const cf of p.custom_fields ?? []) {
-      customSel[cf.category_field_id] = cf.options.map(o => ({
+      const catalog = fieldDefinitionCatalog.find(fd => fd.id === cf.field_definition_id)
+      fields.push({
+        field_definition_id: cf.field_definition_id,
+        sort_order: fields.length,
+        is_required: cf.is_required,
+        label: cf.label,
+        key: cf.key,
+        field_type: cf.field_type,
+        field_option_values: catalog?.field_option_values ?? [],
+      })
+      optionSel[cf.field_definition_id] = cf.options.map(o => ({
         id: o.id, name: o.name, price_modifier: String(o.price_modifier), is_default: o.is_default,
       }))
     }
-    setCustomFieldSel(customSel)
-    setCustomFieldPending({})
+    setProductFields(fields)
+    setCustomFieldOptionSel(optionSel)
+    setCustomFieldPending({}); setPendingFieldDefId('')
     setPendingSize(''); setPendingQuality(''); setPendingType('')
     descEditor?.commands.setContent(p.description ?? '')
     setCityPricing([]); originalCityPricingRef.current = []
     api.get<{ items: Array<{ id: string; city_id: string; city_name: string; price_modifier: number | null }> }>(`/admin/products/${p.id}/city-pricing`)
       .then(r => {
         const entries = (r.items ?? []).map(item => ({
-          id: item.id,
-          city_id: item.city_id,
-          city_name: item.city_name ?? '',
+          id: item.id, city_id: item.city_id, city_name: item.city_name ?? '',
           price_modifier: item.price_modifier != null ? String(item.price_modifier) : '',
         }))
         setCityPricing(entries)
@@ -473,20 +485,130 @@ export default function ProductsPage() {
     if (file) uploadVideoFile(file)
   }
 
-  async function addCategory() {
-    const val = newCategoryName.trim()
-    if (!val) return
-    setAddingCategory(true)
+  function addFieldFromCatalog(fieldDefId: string) {
+    const fd = fieldDefinitionCatalog.find(f => f.id === fieldDefId)
+    if (!fd || productFields.some(pf => pf.field_definition_id === fd.id)) return
+    setProductFields(prev => [
+      ...prev,
+      { field_definition_id: fd.id, sort_order: prev.length, is_required: false, label: fd.label, key: fd.key, field_type: fd.field_type, field_option_values: fd.field_option_values },
+    ])
+    setPendingFieldDefId('')
+  }
+
+  function removeProductField(fieldDefId: string) {
+    setProductFields(prev => prev.filter(f => f.field_definition_id !== fieldDefId).map((f, i) => ({ ...f, sort_order: i })))
+    setCustomFieldOptionSel(prev => { const next = { ...prev }; delete next[fieldDefId]; return next })
+    setCustomFieldPending(prev => { const next = { ...prev }; delete next[fieldDefId]; return next })
+  }
+
+  function toggleFieldRequired(fieldDefId: string) {
+    setProductFields(prev => prev.map(f => f.field_definition_id === fieldDefId ? { ...f, is_required: !f.is_required } : f))
+  }
+
+  function moveField(fromIdx: number, toIdx: number) {
+    setProductFields(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, moved)
+      return next.map((f, i) => ({ ...f, sort_order: i }))
+    })
+  }
+
+  async function createFieldDefinition() {
+    const key = newFieldKey.trim()
+    const label = newFieldLabel.trim()
+    if (!key || !label) { toast.error('Key and label are required'); return }
+    setAddingFieldDef(true)
     try {
-      const res = await api.post<{ data: Category }>('/admin/categories', { name: val })
-      if (res.data) {
-        setCategories(prev => [...prev, res.data])
-        setCategoryId(res.data.id)
-      }
-      setNewCategoryName('')
+      const options = newFieldOptions.split(',').map(o => o.trim()).filter(Boolean)
+      const res = await api.post<{ data: FieldDefCatalog }>('/admin/field-definitions', { key, label, field_type: newFieldType, options })
+      const created: FieldDefCatalog = res.data
+      setFieldDefinitionCatalog(prev => [...prev, created])
+      setProductFields(prev => [
+        ...prev,
+        { field_definition_id: created.id, sort_order: prev.length, is_required: false, label: created.label, key: created.key, field_type: created.field_type, field_option_values: created.field_option_values ?? [] },
+      ])
+      setNewFieldKey(''); setNewFieldLabel(''); setNewFieldType('select'); setNewFieldOptions('')
+      setCreatingField(false)
+      toast.success('Field created and added')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add category')
-    } finally { setAddingCategory(false) }
+      toast.error(err instanceof Error ? err.message : 'Failed to create field')
+    } finally { setAddingFieldDef(false) }
+  }
+
+  function addCustomFieldOption(fieldDefId: string, available: FieldOptionValue[], optionValueId: string) {
+    const opt = available.find(o => o.id === optionValueId)
+    if (!opt) return
+    setCustomFieldOptionSel(prev => {
+      const entries = prev[fieldDefId] ?? []
+      if (entries.some(e => e.id === opt.id)) return prev
+      return { ...prev, [fieldDefId]: [...entries, { id: opt.id, name: opt.value, price_modifier: '', is_default: entries.length === 0 }] }
+    })
+  }
+
+  function updateCustomFieldModifier(fieldDefId: string, i: number, price_modifier: string) {
+    setCustomFieldOptionSel(prev => ({
+      ...prev,
+      [fieldDefId]: (prev[fieldDefId] ?? []).map((e, j) => j === i ? { ...e, price_modifier } : e),
+    }))
+  }
+
+  function removeCustomFieldOption(fieldDefId: string, i: number) {
+    setCustomFieldOptionSel(prev => ({
+      ...prev,
+      [fieldDefId]: (prev[fieldDefId] ?? []).filter((_, j) => j !== i),
+    }))
+  }
+
+  function setCustomFieldDefault(fieldDefId: string, i: number) {
+    setCustomFieldOptionSel(prev => ({
+      ...prev,
+      [fieldDefId]: (prev[fieldDefId] ?? []).map((e, j) => ({ ...e, is_default: j === i })),
+    }))
+  }
+
+  function updateSlab(i: number, field: keyof QtySlab, value: string) {
+    setQtySlabs(prev => prev.map((x, j) => j === i ? { ...x, [field]: value } : x))
+  }
+
+  function addCityPricing(cityId: string) {
+    const city = cities.find(c => c.id === cityId)
+    if (!city || cityPricing.some(e => e.city_id === cityId)) return
+    setCityPricing(prev => [...prev, { city_id: city.id, city_name: city.name, price_modifier: '' }])
+  }
+
+  function updateCityPrice(i: number, value: string) {
+    setCityPricing(prev => prev.map((x, j) => j === i ? { ...x, price_modifier: value } : x))
+  }
+
+  function removeCityPricing(i: number) {
+    setCityPricing(prev => prev.filter((_, j) => j !== i))
+  }
+
+  async function syncCityPricing(productId: string) {
+    const original = originalCityPricingRef.current
+    const current = cityPricing
+    const currentIds = new Set(current.map(e => e.id).filter((id): id is string => !!id))
+    for (const entry of original) {
+      if (entry.id && !currentIds.has(entry.id)) {
+        await api.delete(`/admin/products/${productId}/city-pricing/${entry.id}`)
+      }
+    }
+    for (const entry of current) {
+      if (!entry.id) {
+        await api.post(`/admin/products/${productId}/city-pricing`, {
+          city_id: entry.city_id,
+          price_modifier: entry.price_modifier !== '' ? Number(entry.price_modifier) : 0,
+        })
+      } else {
+        const orig = original.find(o => o.id === entry.id)
+        if (orig && orig.price_modifier !== entry.price_modifier) {
+          await api.patch(`/admin/products/${productId}/city-pricing/${entry.id}`, {
+            price_modifier: entry.price_modifier !== '' ? Number(entry.price_modifier) : 0,
+          })
+        }
+      }
+    }
   }
 
   async function handleSave() {
@@ -495,7 +617,6 @@ export default function ProductsPage() {
       const body = {
         name,
         base_price: Number(basePrice),
-        category_id: categoryId || null,
         description: descEditor?.getHTML() ?? null,
         paper_sizes: paperSizesSel.map(s => ({ paper_size_id: s.id, price_modifier: Number(s.price_modifier) || 0 })),
         paper_qualities: paperQualitiesSel.map(q => ({ paper_quality_id: q.id, price_modifier: Number(q.price_modifier) || 0 })),
@@ -506,9 +627,14 @@ export default function ProductsPage() {
           price_modifier: Number(s.price_modifier) || 0,
           max_completion_minutes: s.max_completion_minutes ? Number(s.max_completion_minutes) : null,
         })),
-        custom_field_options: Object.entries(customFieldSel).flatMap(([categoryFieldId, entries]) =>
-          entries.map(e => ({
-            category_field_id: categoryFieldId,
+        product_fields: productFields.map((f, i) => ({
+          field_definition_id: f.field_definition_id,
+          sort_order: i,
+          is_required: f.is_required,
+        })),
+        custom_field_options: productFields.flatMap(f =>
+          (customFieldOptionSel[f.field_definition_id] ?? []).map(e => ({
+            field_definition_id: f.field_definition_id,
             field_option_value_id: e.id,
             price_modifier: Number(e.price_modifier) || 0,
             is_default: Boolean(e.is_default),
@@ -576,89 +702,13 @@ export default function ProductsPage() {
 
   function updateOptionModifier(
     setEntries: React.Dispatch<React.SetStateAction<OptionEntry[]>>,
-    i: number,
-    price_modifier: string,
+    i: number, price_modifier: string,
   ) {
     setEntries(prev => prev.map((x, j) => j === i ? { ...x, price_modifier } : x))
   }
 
   function removeOption(setEntries: React.Dispatch<React.SetStateAction<OptionEntry[]>>, i: number) {
     setEntries(prev => prev.filter((_, j) => j !== i))
-  }
-
-  function addCustomFieldOption(categoryFieldId: string, available: FieldOptionValue[], optionValueId: string) {
-    const opt = available.find(o => o.id === optionValueId)
-    if (!opt) return
-    setCustomFieldSel(prev => {
-      const entries = prev[categoryFieldId] ?? []
-      if (entries.some(e => e.id === opt.id)) return prev
-      return { ...prev, [categoryFieldId]: [...entries, { id: opt.id, name: opt.value, price_modifier: '', is_default: entries.length === 0 }] }
-    })
-  }
-
-  function updateCustomFieldModifier(categoryFieldId: string, i: number, price_modifier: string) {
-    setCustomFieldSel(prev => ({
-      ...prev,
-      [categoryFieldId]: (prev[categoryFieldId] ?? []).map((e, j) => j === i ? { ...e, price_modifier } : e),
-    }))
-  }
-
-  function removeCustomFieldOption(categoryFieldId: string, i: number) {
-    setCustomFieldSel(prev => ({
-      ...prev,
-      [categoryFieldId]: (prev[categoryFieldId] ?? []).filter((_, j) => j !== i),
-    }))
-  }
-
-  function setCustomFieldDefault(categoryFieldId: string, i: number) {
-    setCustomFieldSel(prev => ({
-      ...prev,
-      [categoryFieldId]: (prev[categoryFieldId] ?? []).map((e, j) => ({ ...e, is_default: j === i })),
-    }))
-  }
-
-  function updateSlab(i: number, field: keyof QtySlab, value: string) {
-    setQtySlabs(prev => prev.map((x, j) => j === i ? { ...x, [field]: value } : x))
-  }
-
-  function addCityPricing(cityId: string) {
-    const city = cities.find(c => c.id === cityId)
-    if (!city || cityPricing.some(e => e.city_id === cityId)) return
-    setCityPricing(prev => [...prev, { city_id: city.id, city_name: city.name, price_modifier: '' }])
-  }
-
-  function updateCityPrice(i: number, value: string) {
-    setCityPricing(prev => prev.map((x, j) => j === i ? { ...x, price_modifier: value } : x))
-  }
-
-  function removeCityPricing(i: number) {
-    setCityPricing(prev => prev.filter((_, j) => j !== i))
-  }
-
-  async function syncCityPricing(productId: string) {
-    const original = originalCityPricingRef.current
-    const current = cityPricing
-    const currentIds = new Set(current.map(e => e.id).filter((id): id is string => !!id))
-    for (const entry of original) {
-      if (entry.id && !currentIds.has(entry.id)) {
-        await api.delete(`/admin/products/${productId}/city-pricing/${entry.id}`)
-      }
-    }
-    for (const entry of current) {
-      if (!entry.id) {
-        await api.post(`/admin/products/${productId}/city-pricing`, {
-          city_id: entry.city_id,
-          price_modifier: entry.price_modifier !== '' ? Number(entry.price_modifier) : 0,
-        })
-      } else {
-        const orig = original.find(o => o.id === entry.id)
-        if (orig && orig.price_modifier !== entry.price_modifier) {
-          await api.patch(`/admin/products/${productId}/city-pricing/${entry.id}`, {
-            price_modifier: entry.price_modifier !== '' ? Number(entry.price_modifier) : 0,
-          })
-        }
-      }
-    }
   }
 
   const availableCities = cities.filter(c => !cityPricing.some(e => e.city_id === c.id))
@@ -707,8 +757,7 @@ export default function ProductsPage() {
                     <TableCell className="text-right space-x-2">
                       <Button size="sm" variant="outline" onClick={() => openEdit(p)}>Edit</Button>
                       <Button
-                        size="sm"
-                        variant="outline"
+                        size="sm" variant="outline"
                         disabled={togglingActiveId === p.id}
                         onClick={() => handleToggleActive(p)}
                       >
@@ -750,7 +799,7 @@ export default function ProductsPage() {
             <section className="space-y-3">
               <SectionHeader
                 label="Basic Information"
-                description="The product name shown to customers and the base price per unit before any size, quality, or quantity adjustments are applied."
+                description="The product name shown to customers and the base price per unit before any size, quality, or quantity adjustments."
               />
               <div className="space-y-1.5">
                 <Label>Product Name <span className="text-destructive">*</span></Label>
@@ -760,43 +809,13 @@ export default function ProductsPage() {
                 <Label>Base Price (₹) <span className="text-destructive">*</span></Label>
                 <Input type="number" value={basePrice} onChange={e => setBasePrice(e.target.value)} placeholder="0" />
               </div>
-              <div className="space-y-1.5">
-                <Label>Category</Label>
-                <Combobox
-                  options={categories.map(c => ({ value: c.id, label: c.name }))}
-                  value={categoryId}
-                  onValueChange={setCategoryId}
-                  placeholder="Select category…"
-                  searchPlaceholder="Search categories…"
-                />
-                <div className="flex items-center gap-2 pt-1">
-                  <Input
-                    className="flex-1"
-                    placeholder="Add new category…"
-                    value={newCategoryName}
-                    onChange={e => setNewCategoryName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCategory())}
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={addCategory} disabled={addingCategory || !newCategoryName.trim()}>
-                    <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add
-                  </Button>
-                </div>
-                {categoryId && (
-                  <p className="text-xs text-muted-foreground pt-1">
-                    <Link href={`/categories/${categoryId}/fields`} className="text-primary underline-offset-4 hover:underline">
-                      Manage fields for this category
-                    </Link>
-                    {' '}(Finish, Binding, Lamination, etc.)
-                  </p>
-                )}
-              </div>
             </section>
 
             {/* ── Description ── */}
             <section className="space-y-3">
               <SectionHeader
                 label="Product Description"
-                description="Describe what this product includes — material, finish, use case, etc. This is shown to customers on the product page."
+                description="Describe what this product includes — material, finish, use case, etc."
               />
               <div className="rounded-lg border bg-card overflow-hidden">
                 <div className="flex items-center gap-0.5 px-2 py-1.5 border-b bg-muted/40 flex-wrap">
@@ -831,7 +850,7 @@ export default function ProductsPage() {
             <section className="space-y-3">
               <SectionHeader
                 label="Product Images"
-                description="Upload photos of this product. The first image is used as the thumbnail in listings. Supports PNG, JPG, and WEBP."
+                description="Upload photos of this product. The first image is used as the thumbnail. Supports PNG, JPG, and WEBP."
               />
               <input ref={imgInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageFiles} />
               <div
@@ -845,9 +864,7 @@ export default function ProductsPage() {
               >
                 <UploadIcon className="h-6 w-6 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-medium">
-                    {uploadingImages ? 'Uploading…' : 'Drop images here or click to browse'}
-                  </p>
+                  <p className="text-sm font-medium">{uploadingImages ? 'Uploading…' : 'Drop images here or click to browse'}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">PNG, JPG, WEBP</p>
                 </div>
               </div>
@@ -873,7 +890,7 @@ export default function ProductsPage() {
             <section className="space-y-3">
               <SectionHeader
                 label="Product Video"
-                description="Optional. Upload a short video to show the product quality or printing process. Displayed on the product page."
+                description="Optional. Upload a short video to show the product quality or printing process."
               />
               <input ref={vidInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoFile} />
               <div
@@ -905,7 +922,7 @@ export default function ProductsPage() {
             {/* ── Paper Sizes ── */}
             <VariantOptionEditor
               title="Available Paper Sizes"
-              description="Select the paper sizes this product can be printed in. For each size, enter how much to add (+) or subtract (-) from the base price per unit. Leave blank or enter 0 if the size has no extra charge."
+              description="Select the paper sizes this product can be printed in and their price adjustments."
               emptyHint={<>No paper sizes configured.{' '}<Link href="/paper/sizes" className="text-primary underline-offset-4 hover:underline">Add paper sizes</Link></>}
               entries={paperSizesSel}
               available={availableSizes}
@@ -920,7 +937,7 @@ export default function ProductsPage() {
             {/* ── Paper Qualities ── */}
             <VariantOptionEditor
               title="Available Paper Qualities"
-              description="Select the paper quality (GSM / finish) options for this product. Enter how much to add (+) or subtract (-) from the base price per unit for each quality. Leave blank or enter 0 for no extra charge."
+              description="Select the paper quality (GSM) options and their price adjustments."
               emptyHint={<>No paper qualities configured.{' '}<Link href="/paper/qualities" className="text-primary underline-offset-4 hover:underline">Add paper qualities</Link></>}
               entries={paperQualitiesSel}
               available={availableQualities}
@@ -935,7 +952,7 @@ export default function ProductsPage() {
             {/* ── Paper Type ── */}
             <VariantOptionEditor
               title="Available Paper Types"
-              description="Select the paper types (e.g. Glossy, Matte, Kraft) available for this product. Enter how much to add (+) or subtract (-) from the base price per unit for each type. Leave blank or enter 0 for no extra charge."
+              description="Select the paper types (e.g. Glossy, Matte, Kraft) and their price adjustments."
               emptyHint={<>No paper types configured.{' '}<Link href="/paper/types" className="text-primary underline-offset-4 hover:underline">Add paper types</Link></>}
               entries={paperTypesSel}
               available={availableTypes}
@@ -947,51 +964,155 @@ export default function ProductsPage() {
               comboboxPlaceholder="Select paper type…"
             />
 
-            {/* ── Category-Specific Fields ── */}
-            {categoryFields
-              .filter(cf => cf.field_definitions && ['select', 'multi_select', 'boolean'].includes(cf.field_definitions.field_type))
-              .map(cf => {
-                const fieldDef = cf.field_definitions!
-                const entries = customFieldSel[cf.id] ?? []
-                const available = fieldDef.field_option_values.filter(v => !entries.some(e => e.id === v.id))
-                return (
-                  <CustomFieldOptionsEditor
-                    key={cf.id}
-                    field={fieldDef}
-                    isRequired={cf.is_required}
-                    entries={entries}
-                    available={available.map(v => ({ id: v.id, name: v.value }))}
-                    pending={customFieldPending[cf.id] ?? ''}
-                    setPending={v => setCustomFieldPending(prev => ({ ...prev, [cf.id]: v }))}
-                    onAdd={id => addCustomFieldOption(cf.id, fieldDef.field_option_values, id)}
-                    onUpdate={(i, v) => updateCustomFieldModifier(cf.id, i, v)}
-                    onRemove={i => removeCustomFieldOption(cf.id, i)}
-                    onSetDefault={i => setCustomFieldDefault(cf.id, i)}
-                  />
-                )
-              })}
-            {categoryFields.some(cf => cf.field_definitions && ['number', 'text'].includes(cf.field_definitions.field_type)) && (
-              <section className="space-y-3">
-                <SectionHeader
-                  label="Additional Customer Inputs"
-                  description="These fields are shown to customers on the product page but do not affect price."
+            {/* ── Custom Fields ── */}
+            <section className="space-y-3">
+              <SectionHeader
+                label="Custom Fields"
+                description="Fields shown to customers when configuring this product. Drag to reorder. Select/Radio/Boolean fields can have per-option price modifiers."
+              />
+
+              {/* Draggable list of assigned fields */}
+              {productFields.length > 0 && (
+                <div className="space-y-2">
+                  {productFields.map((pf, idx) => {
+                    const isPriceAffecting = PRICE_AFFECTING_TYPES.has(pf.field_type)
+                    const entries = customFieldOptionSel[pf.field_definition_id] ?? []
+                    const available = pf.field_option_values.filter(v => !entries.some(e => e.id === v.id))
+                    return (
+                      <div
+                        key={pf.field_definition_id}
+                        draggable
+                        onDragStart={() => { dragFieldIndexRef.current = idx }}
+                        onDragOver={e => { e.preventDefault() }}
+                        onDrop={() => {
+                          const from = dragFieldIndexRef.current
+                          if (from != null && from !== idx) moveField(from, idx)
+                          dragFieldIndexRef.current = null
+                        }}
+                        className="rounded-md border bg-card"
+                      >
+                        <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 rounded-t-md border-b">
+                          <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium">{pf.label}</span>
+                            <Badge variant="outline" className="ml-2 text-xs">{FIELD_TYPE_LABELS[pf.field_type] ?? pf.field_type}</Badge>
+                          </div>
+                          <Button
+                            variant="ghost" size="icon-sm"
+                            onClick={() => removeProductField(pf.field_definition_id)}
+                          >
+                            <XIcon className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                        <div className="px-3 py-3">
+                          {isPriceAffecting ? (
+                            <CustomFieldOptionsEditor
+                              fieldDefId={pf.field_definition_id}
+                              field={{ label: pf.label, field_type: pf.field_type }}
+                              isRequired={pf.is_required}
+                              entries={entries}
+                              available={available.map(v => ({ id: v.id, name: v.value }))}
+                              pending={customFieldPending[pf.field_definition_id] ?? ''}
+                              setPending={v => setCustomFieldPending(prev => ({ ...prev, [pf.field_definition_id]: v }))}
+                              onAdd={id => addCustomFieldOption(pf.field_definition_id, pf.field_option_values, id)}
+                              onUpdate={(i, v) => updateCustomFieldModifier(pf.field_definition_id, i, v)}
+                              onRemove={i => removeCustomFieldOption(pf.field_definition_id, i)}
+                              onSetDefault={i => setCustomFieldDefault(pf.field_definition_id, i)}
+                              onToggleRequired={() => toggleFieldRequired(pf.field_definition_id)}
+                            />
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm text-muted-foreground">
+                                Customer input field — no price impact
+                              </p>
+                              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                                <input type="checkbox" checked={pf.is_required} onChange={() => toggleFieldRequired(pf.field_definition_id)} className="accent-primary" />
+                                Required
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Add field from catalog */}
+              {availableFieldDefs.length > 0 && (
+                <Combobox
+                  options={availableFieldDefs.map(fd => ({ value: fd.id, label: `${fd.label} (${FIELD_TYPE_LABELS[fd.field_type] ?? fd.field_type})` }))}
+                  value={pendingFieldDefId}
+                  onValueChange={v => { setPendingFieldDefId(v); addFieldFromCatalog(v) }}
+                  placeholder="Add field from catalog…"
+                  searchPlaceholder="Search fields…"
                 />
-                <ul className="text-sm text-muted-foreground list-disc pl-5 space-y-1">
-                  {categoryFields
-                    .filter(cf => cf.field_definitions && ['number', 'text'].includes(cf.field_definitions.field_type))
-                    .map(cf => (
-                      <li key={cf.id}>{cf.field_definitions!.label}{cf.is_required ? ' (required)' : ''}</li>
-                    ))}
-                </ul>
-              </section>
-            )}
+              )}
+              {availableFieldDefs.length === 0 && productFields.length > 0 && (
+                <p className="text-xs text-muted-foreground">All catalog fields are assigned to this product.</p>
+              )}
+
+              {/* Create new field definition inline */}
+              {!creatingField ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => setCreatingField(true)}>
+                  <PlusIcon className="h-3.5 w-3.5 mr-1" /> Create New Field Type
+                </Button>
+              ) : (
+                <div className="rounded-md border p-3 space-y-3 bg-muted/20">
+                  <p className="text-sm font-medium">New Field Definition</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Key (internal)</Label>
+                      <Input
+                        value={newFieldKey}
+                        onChange={e => setNewFieldKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                        placeholder="e.g. paper_color"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Label (shown to customer)</Label>
+                      <Input value={newFieldLabel} onChange={e => setNewFieldLabel(e.target.value)} placeholder="e.g. Paper Color" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Field Type</Label>
+                    <select
+                      value={newFieldType}
+                      onChange={e => setNewFieldType(e.target.value as FieldDefCatalog['field_type'])}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="select">Dropdown (single select)</option>
+                      <option value="radio">Radio Buttons</option>
+                      <option value="multi_select">Checkboxes (multi-select)</option>
+                      <option value="boolean">Yes / No</option>
+                      <option value="number">Number</option>
+                      <option value="text">Short Text</option>
+                      <option value="textarea">Long Text / Textarea</option>
+                      <option value="file_upload">File Upload</option>
+                    </select>
+                  </div>
+                  {(newFieldType === 'select' || newFieldType === 'radio' || newFieldType === 'multi_select' || newFieldType === 'boolean') && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">Options (comma-separated)</Label>
+                      <Input value={newFieldOptions} onChange={e => setNewFieldOptions(e.target.value)} placeholder="e.g. Red, Blue, Green" />
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" onClick={createFieldDefinition} disabled={addingFieldDef || !newFieldKey.trim() || !newFieldLabel.trim()}>
+                      {addingFieldDef ? 'Creating…' : 'Create & Add'}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setCreatingField(false)}>Cancel</Button>
+                  </div>
+                </div>
+              )}
+            </section>
 
             {/* ── Quantity Slabs ── */}
             <section className="space-y-3">
               <div className="flex items-start justify-between gap-4">
                 <SectionHeader
                   label="Quantity-Based Pricing (Slabs)"
-                  description="Set price adjustments based on order quantity. For each range, enter how much to add (+) or subtract (-) per unit from the base price. Also set the maximum time (in minutes) to fulfill orders in that range. Leave Max Qty blank for open-ended slabs (e.g. 100+)."
+                  description="Set price adjustments based on order quantity. Leave Max Qty blank for open-ended slabs (e.g. 100+)."
                 />
                 <Button variant="outline" size="sm" className="shrink-0" onClick={() => setQtySlabs(prev => [...prev, { min_qty: '', max_qty: '', price_modifier: '', max_completion_minutes: '' }])}>
                   <PlusIcon className="h-3.5 w-3.5 mr-1" />
@@ -1030,7 +1151,7 @@ export default function ProductsPage() {
             <section className="space-y-3">
               <SectionHeader
                 label="City-Specific Pricing"
-                description="Adjust the price for customers ordering from specific cities. Enter how much to add (+) or subtract (-) from the base price per unit. Cities without an entry use the default base price."
+                description="Adjust the price for customers ordering from specific cities."
               />
               {cities.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No cities configured.</p>

@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
   Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag, MapPin, Truck,
-  ChevronDown, LayoutGrid,
+  ChevronDown, MonitorPlay,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
@@ -35,7 +35,6 @@ const customerNavItems: NavItem[] = [
 ]
 
 const productNavItems: NavItem[] = [
-  { href: '/categories', label: 'Categories', icon: LayoutGrid },
   { href: '/products',   label: 'Products',   icon: Package },
   { href: '/product-requests', label: 'Product requests', icon: Inbox, badgeKey: 'productRequests' },
   { href: '/product-price-requests', label: 'Price requests', icon: Tag, badgeKey: 'priceRequests' },
@@ -47,7 +46,11 @@ const otherNavItems: NavItem[] = [
   { href: '/orders',   label: 'Orders',   icon: ShoppingBag },
   { href: '/payments', label: 'Payments', icon: CreditCard },
   { href: '/reports',  label: 'Reports',  icon: BarChart2 },
-  { href: '/settings', label: 'Settings', icon: Settings },
+]
+
+const settingsNavItems: NavItem[] = [
+  { href: '/settings',                      label: 'Content Settings',     icon: Settings },
+  { href: '/settings/homepage-navigation',  label: 'Homepage & Navigation', icon: MonitorPlay },
 ]
 
 function NavLink({
@@ -191,6 +194,14 @@ export function AppSidebar() {
             <NavLink key={href} href={href} label={label} icon={icon} active={pathname === href} />
           ))}
         </div>
+
+        <NavGroup
+          label="Settings"
+          items={settingsNavItems}
+          pathname={pathname}
+          badges={{}}
+          defaultOpen={false}
+        />
 
         <button
           type="button"
