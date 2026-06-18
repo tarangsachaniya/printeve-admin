@@ -140,7 +140,7 @@ interface ProductFieldDef {
 }
 
 function CustomFieldOptionsEditor({
-  fieldDefId, field, isRequired, entries, available, pending, setPending, onAdd, onUpdate, onRemove, onSetDefault, onToggleRequired,
+  fieldDefId, field, isRequired, entries, available, pending, setPending, onAdd, onUpdate, onRemove, onSetDefault, onToggleRequired, onCreateOption,
 }: {
   fieldDefId: string
   field: Pick<FieldDefCatalog, 'label' | 'field_type'>
@@ -154,9 +154,23 @@ function CustomFieldOptionsEditor({
   onRemove: (i: number) => void
   onSetDefault: (i: number) => void
   onToggleRequired: () => void
+  onCreateOption?: (fieldDefId: string, value: string) => Promise<void>
 }) {
+  const [newOptVal, setNewOptVal] = useState('')
+  const [creatingOpt, setCreatingOpt] = useState(false)
   const hasOptions = available.length > 0 || entries.length > 0
   const showDefault = field.field_type === 'select' || field.field_type === 'boolean' || field.field_type === 'radio'
+  const isPriceAffecting = ['select', 'multi_select', 'boolean', 'radio'].includes(field.field_type)
+
+  async function handleCreateOption() {
+    if (!newOptVal.trim() || !onCreateOption) return
+    setCreatingOpt(true)
+    try {
+      await onCreateOption(fieldDefId, newOptVal.trim())
+      setNewOptVal('')
+    } finally { setCreatingOpt(false) }
+  }
+
   return (
     <div className="rounded-md border p-3 space-y-3 bg-muted/20">
       <div className="flex items-center justify-between gap-2">
@@ -176,7 +190,21 @@ function CustomFieldOptionsEditor({
           disabled={available.length === 0}
         />
       )}
-      {available.length === 0 && entries.length > 0 && (
+      {isPriceAffecting && onCreateOption && (
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="New option value"
+            value={newOptVal}
+            onChange={e => setNewOptVal(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleCreateOption())}
+            className="flex-1"
+          />
+          <Button size="sm" variant="outline" onClick={handleCreateOption} disabled={creatingOpt || !newOptVal.trim()}>
+            <PlusIcon className="h-3.5 w-3.5 mr-1" /> {creatingOpt ? '...' : 'Create'}
+          </Button>
+        </div>
+      )}
+      {available.length === 0 && entries.length > 0 && !isPriceAffecting && (
         <p className="text-xs text-muted-foreground">All configured options are added.</p>
       )}
       {entries.length > 0 && (
@@ -224,6 +252,7 @@ interface Product {
   base_price: number
   is_active: boolean
   description?: string | null
+  category_id?: string | null
   paper_sizes?: { paper_size_id: string; name: string; price_modifier: number }[]
   paper_qualities?: { paper_quality_id: string; name: string; price_modifier: number }[]
   paper_types?: { paper_type_id: string; name: string; price_modifier: number }[]
@@ -263,6 +292,7 @@ export default function ProductsPage() {
   const [paperQualities, setPaperQualities] = useState<PaperQuality[]>([])
   const [paperTypeOptions, setPaperTypeOptions] = useState<PaperTypeOption[]>([])
   const [fieldDefinitionCatalog, setFieldDefinitionCatalog] = useState<FieldDefCatalog[]>([])
+  const [categories, setCategories] = useState<{id: string; title: string}[]>([])
   const [cities, setCities] = useState<City[]>([])
   const [cityPricing, setCityPricing] = useState<CityPricingEntry[]>([])
   const originalCityPricingRef = useRef<CityPricingEntry[]>([])
@@ -278,6 +308,7 @@ export default function ProductsPage() {
 
   const [name, setName] = useState('')
   const [basePrice, setBasePrice] = useState('')
+  const [categoryId, setCategoryId] = useState('')
   const [paperSizesSel, setPaperSizesSel] = useState<OptionEntry[]>([])
   const [paperQualitiesSel, setPaperQualitiesSel] = useState<OptionEntry[]>([])
   const [paperTypesSel, setPaperTypesSel] = useState<OptionEntry[]>([])
@@ -333,7 +364,7 @@ export default function ProductsPage() {
   const vidInputRef = useRef<HTMLInputElement>(null)
 
   function resetForm() {
-    setName(''); setBasePrice('')
+    setName(''); setBasePrice(''); setCategoryId('')
     setPaperSizesSel([]); setPaperQualitiesSel([]); setPaperTypesSel([]); setQtySlabs([])
     setPendingSize(''); setPendingQuality(''); setPendingType('')
     setImages([]); setVideoUrl('')
@@ -351,6 +382,7 @@ export default function ProductsPage() {
       types: PaperTypeOption[]
       cities: City[]
       field_definitions: FieldDefCatalog[]
+      categories: { id: string; title: string }[]
     }
   }
 
@@ -369,6 +401,7 @@ export default function ProductsPage() {
         setPaperTypeOptions(res.meta?.types ?? [])
         setCities(res.meta?.cities ?? [])
         setFieldDefinitionCatalog(res.meta?.field_definitions ?? [])
+        setCategories(res.meta?.categories ?? [])
       })
       .catch((err) => toast.error(err.message ?? 'Failed to load products'))
       .finally(() => setLoading(false))
@@ -389,6 +422,7 @@ export default function ProductsPage() {
     setEditing(p)
     setName(p.name)
     setBasePrice(String(p.base_price))
+    setCategoryId(p.category_id ?? '')
     setPaperSizesSel((p.paper_sizes ?? []).map(s => ({ id: s.paper_size_id, name: s.name, price_modifier: String(s.price_modifier) })))
     setPaperQualitiesSel((p.paper_qualities ?? []).map(q => ({ id: q.paper_quality_id, name: q.name, price_modifier: String(q.price_modifier) })))
     setPaperTypesSel((p.paper_types ?? []).map(t => ({ id: t.paper_type_id, name: t.name, price_modifier: String(t.price_modifier) })))
@@ -536,6 +570,33 @@ export default function ProductsPage() {
     } finally { setAddingFieldDef(false) }
   }
 
+  async function createFieldOption(fieldDefId: string, value: string) {
+    try {
+      const res = await api.post<{ data: { id: string; value: string; sort_order: number } }>(
+        `/admin/field-definitions/${fieldDefId}/options`, { value: value.trim() }
+      )
+      const newOpt = res.data
+      setFieldDefinitionCatalog(prev => prev.map(fd =>
+        fd.id === fieldDefId
+          ? { ...fd, field_option_values: [...fd.field_option_values, newOpt] }
+          : fd
+      ))
+      setProductFields(prev => prev.map(pf =>
+        pf.field_definition_id === fieldDefId
+          ? { ...pf, field_option_values: [...pf.field_option_values, newOpt] }
+          : pf
+      ))
+      setCustomFieldOptionSel(prev => ({
+        ...prev,
+        [fieldDefId]: [...(prev[fieldDefId] ?? []),
+          { id: newOpt.id, name: newOpt.value, price_modifier: '', is_default: false }],
+      }))
+      toast.success(`Option "${value}" created`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create option')
+    }
+  }
+
   function addCustomFieldOption(fieldDefId: string, available: FieldOptionValue[], optionValueId: string) {
     const opt = available.find(o => o.id === optionValueId)
     if (!opt) return
@@ -642,6 +703,7 @@ export default function ProductsPage() {
         ),
         images,
         video_url: videoUrl || null,
+        category_id: categoryId || null,
       }
       if (editing) {
         await api.patch(`/admin/products/${editing.id}`, body)
@@ -809,6 +871,18 @@ export default function ProductsPage() {
                 <Label>Base Price (₹) <span className="text-destructive">*</span></Label>
                 <Input type="number" value={basePrice} onChange={e => setBasePrice(e.target.value)} placeholder="0" />
               </div>
+              {categories.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label>Category</Label>
+                  <Combobox
+                    options={categories.map(c => ({ value: c.id, label: c.title }))}
+                    value={categoryId}
+                    onValueChange={setCategoryId}
+                    placeholder="Select category (optional)"
+                    searchPlaceholder="Search categories…"
+                  />
+                </div>
+              )}
             </section>
 
             {/* ── Description ── */}
@@ -1019,6 +1093,7 @@ export default function ProductsPage() {
                               onRemove={i => removeCustomFieldOption(pf.field_definition_id, i)}
                               onSetDefault={i => setCustomFieldDefault(pf.field_definition_id, i)}
                               onToggleRequired={() => toggleFieldRequired(pf.field_definition_id)}
+                              onCreateOption={createFieldOption}
                             />
                           ) : (
                             <div className="flex items-center justify-between">

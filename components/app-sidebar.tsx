@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
   Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag, MapPin, Truck,
-  ChevronDown, MonitorPlay,
+  ChevronDown, MonitorPlay, LayoutGrid, Globe, FileText, Navigation, Settings2, ScrollText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
@@ -35,6 +35,7 @@ const customerNavItems: NavItem[] = [
 ]
 
 const productNavItems: NavItem[] = [
+  { href: '/categories', label: 'Categories', icon: LayoutGrid },
   { href: '/products',   label: 'Products',   icon: Package },
   { href: '/product-requests', label: 'Product requests', icon: Inbox, badgeKey: 'productRequests' },
   { href: '/product-price-requests', label: 'Price requests', icon: Tag, badgeKey: 'priceRequests' },
@@ -49,8 +50,15 @@ const otherNavItems: NavItem[] = [
 ]
 
 const settingsNavItems: NavItem[] = [
-  { href: '/settings',                      label: 'Content Settings',     icon: Settings },
-  { href: '/settings/homepage-navigation',  label: 'Homepage & Navigation', icon: MonitorPlay },
+  { href: '/settings',  label: 'Content Settings', icon: Settings },
+]
+
+const cmsNavItems: NavItem[] = [
+  { href: '/website',                         label: 'Pages',                icon: FileText,   superAdminOnly: true },
+  { href: '/settings/homepage-navigation',    label: 'Homepage & Navigation', icon: MonitorPlay, superAdminOnly: true },
+  { href: '/website/navigation',              label: 'Navbar & Footer',      icon: Navigation, superAdminOnly: true },
+  { href: '/website/settings',                label: 'Site Settings',        icon: Settings2,  superAdminOnly: true },
+  { href: '/website/logs',                    label: 'Audit Logs',           icon: ScrollText, superAdminOnly: true },
 ]
 
 function NavLink({
@@ -202,6 +210,16 @@ export function AppSidebar() {
           badges={{}}
           defaultOpen={false}
         />
+
+        {isSuperAdmin && (
+          <NavGroup
+            label="Website"
+            items={cmsNavItems}
+            pathname={pathname}
+            badges={{}}
+            defaultOpen={false}
+          />
+        )}
 
         <button
           type="button"
