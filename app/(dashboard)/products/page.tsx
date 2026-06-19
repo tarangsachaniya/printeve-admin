@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { PlusIcon, VideoIcon, XIcon, UploadIcon, Info, GripVertical, ChevronDown, ChevronUp } from 'lucide-react'
+import { PlusIcon, VideoIcon, XIcon, UploadIcon, Info, GripVertical, ChevronDown, ChevronUp, ImageIcon } from 'lucide-react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { toast } from 'sonner'
@@ -64,7 +64,7 @@ function ToolbarButton({
 }
 
 function VariantOptionEditor({
-  title, description, emptyHint, entries, available, pending, setPending, onAdd, onUpdate, onRemove, comboboxPlaceholder,
+  title, description, emptyHint, entries, available, pending, setPending, onAdd, onUpdate, onRemove, comboboxPlaceholder, onCreateOption, createPlaceholder,
 }: {
   title: string
   description?: string
@@ -77,14 +77,26 @@ function VariantOptionEditor({
   onUpdate: (i: number, value: string) => void
   onRemove: (i: number) => void
   comboboxPlaceholder: string
+  onCreateOption?: (name: string) => Promise<void>
+  createPlaceholder?: string
 }) {
+  const [newOptVal, setNewOptVal] = useState('')
+  const [creatingOpt, setCreatingOpt] = useState(false)
   const hasOptions = available.length > 0 || entries.length > 0
+
+  async function handleCreate() {
+    if (!newOptVal.trim() || !onCreateOption) return
+    setCreatingOpt(true)
+    try {
+      await onCreateOption(newOptVal.trim())
+      setNewOptVal('')
+    } finally { setCreatingOpt(false) }
+  }
+
   return (
     <section className="space-y-3">
       <SectionHeader label={title} description={description} />
-      {!hasOptions ? (
-        <p className="text-sm text-muted-foreground">{emptyHint}</p>
-      ) : (
+      {hasOptions && (
         <Combobox
           options={available.map(o => ({ value: o.id, label: o.name }))}
           value={pending}
@@ -94,7 +106,21 @@ function VariantOptionEditor({
           disabled={available.length === 0}
         />
       )}
-      {available.length === 0 && entries.length > 0 && (
+      {onCreateOption && (
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder={createPlaceholder ?? 'New option name'}
+            value={newOptVal}
+            onChange={e => setNewOptVal(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleCreate())}
+            className="flex-1"
+          />
+          <Button size="sm" variant="outline" onClick={handleCreate} disabled={creatingOpt || !newOptVal.trim()}>
+            <PlusIcon className="h-3.5 w-3.5 mr-1" /> {creatingOpt ? '...' : 'Create'}
+          </Button>
+        </div>
+      )}
+      {available.length === 0 && entries.length > 0 && !onCreateOption && (
         <p className="text-xs text-muted-foreground">All configured options are added.</p>
       )}
       {entries.length > 0 && (
@@ -259,6 +285,10 @@ interface Product {
   quantity_slabs?: QuantitySlab[]
   images?: string[]
   video_url?: string | null
+  faqs?: { question: string; answer: string }[]
+  finish_and_care?: string[]
+  guidelines?: { icon_url: string; title: string; description: string }[]
+  specifications?: { key: string; value: string }[]
   custom_fields?: {
     product_field_id: string
     field_definition_id: string
@@ -333,6 +363,35 @@ export default function ProductsPage() {
   // Drag-and-drop state for product fields reordering
   const dragFieldIndexRef = useRef<number | null>(null)
 
+  // Content sections state
+  const DEFAULT_SPECS = [
+    { key: 'Material', value: '' },
+    { key: 'Trim Size', value: '' },
+    { key: 'Print Options', value: '' },
+    { key: 'Paper Weight / GSM', value: '' },
+    { key: 'Finish Type', value: '' },
+    { key: 'Color Mode', value: '' },
+    { key: 'Finish', value: '' },
+    { key: 'Printing Sides', value: '' },
+    { key: 'Special Finishes', value: '' },
+    { key: 'Fold Type', value: '' },
+    { key: 'Lamination', value: '' },
+    { key: 'Usage', value: '' },
+    { key: 'Binding', value: '' },
+    { key: 'Waterproof', value: '' },
+    { key: 'Window', value: '' },
+    { key: 'Envelope Needed', value: '' },
+    { key: 'Individual Cut', value: '' },
+    { key: 'Hole Required', value: '' },
+    { key: 'String Required', value: '' },
+    { key: 'Number of Pages', value: '' },
+  ]
+  const [faqs, setFaqs] = useState<{ question: string; answer: string }[]>([])
+  const [finishAndCare, setFinishAndCare] = useState<string[]>([])
+  const [guidelinesArr, setGuidelinesArr] = useState<{ icon_url: string; title: string; description: string }[]>([])
+  const [specifications, setSpecifications] = useState<{ key: string; value: string }[]>([])
+  const [uploadingGuidelineIcon, setUploadingGuidelineIcon] = useState<number | null>(null)
+
   const [showDescHtml, setShowDescHtml] = useState(false)
   const [descHtmlValue, setDescHtmlValue] = useState('')
 
@@ -371,6 +430,7 @@ export default function ProductsPage() {
     setCityPricing([]); originalCityPricingRef.current = []
     setProductFields([]); setCustomFieldOptionSel({}); setCustomFieldPending({}); setPendingFieldDefId('')
     setCreatingField(false); setNewFieldKey(''); setNewFieldLabel(''); setNewFieldType('select'); setNewFieldOptions('')
+    setFaqs([]); setFinishAndCare([]); setGuidelinesArr([]); setSpecifications([])
     descEditor?.commands.setContent('')
   }
 
@@ -415,7 +475,7 @@ export default function ProductsPage() {
   const availableFieldDefs = fieldDefinitionCatalog.filter(fd => !productFields.some(pf => pf.field_definition_id === fd.id))
 
   function openCreate() {
-    setEditing(null); resetForm(); setOpen(true)
+    setEditing(null); resetForm(); setSpecifications([...DEFAULT_SPECS]); setOpen(true)
   }
 
   function openEdit(p: Product) {
@@ -434,6 +494,10 @@ export default function ProductsPage() {
     })))
     setImages(p.images ?? [])
     setVideoUrl(p.video_url ?? '')
+    setFaqs(p.faqs ?? [])
+    setFinishAndCare(p.finish_and_care ?? [])
+    setGuidelinesArr(p.guidelines ?? [])
+    setSpecifications(p.specifications?.length ? p.specifications : DEFAULT_SPECS)
 
     const fields: ProductFieldDef[] = []
     const optionSel: Record<string, CustomFieldOptionEntry[]> = {}
@@ -517,6 +581,35 @@ export default function ProductsPage() {
     setVidDragOver(false)
     const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('video/'))
     if (file) uploadVideoFile(file)
+  }
+
+  async function createPaperSize(name: string) {
+    const res = await api.post<{ data: PaperSize }>('/admin/paper/sizes', { name, sort_order: paperSizes.length })
+    const created = res.data
+    setPaperSizes(prev => [...prev, created])
+    setPaperSizesSel(prev => [...prev, { id: created.id, name: created.name, price_modifier: '' }])
+    toast.success(`Paper size "${name}" created`)
+  }
+
+  async function createPaperQuality(input: string) {
+    const match = input.match(/^(\d+)\s*(?:GSM)?\s*(?:\((.+)\))?$/i)
+    const gsm = match ? Number(match[1]) : Number(input)
+    const label = match?.[2]?.trim() || null
+    if (!gsm || isNaN(gsm)) { toast.error('Enter a valid GSM value, e.g. "300" or "300 GSM (Premium)"'); return }
+    const res = await api.post<{ data: { id: string; gsm: number; label: string | null } }>('/admin/paper/qualities', { gsm, label })
+    const q = res.data
+    const displayName = q.label ? `${q.gsm} GSM (${q.label})` : `${q.gsm} GSM`
+    setPaperQualities(prev => [...prev, { id: q.id, gsm: q.gsm, label: q.label, name: displayName }])
+    setPaperQualitiesSel(prev => [...prev, { id: q.id, name: displayName, price_modifier: '' }])
+    toast.success(`Paper quality "${displayName}" created`)
+  }
+
+  async function createPaperType(name: string) {
+    const res = await api.post<{ data: PaperTypeOption }>('/admin/paper/types', { name, sort_order: paperTypeOptions.length })
+    const created = res.data
+    setPaperTypeOptions(prev => [...prev, created])
+    setPaperTypesSel(prev => [...prev, { id: created.id, name: created.name, price_modifier: '' }])
+    toast.success(`Paper type "${name}" created`)
   }
 
   function addFieldFromCatalog(fieldDefId: string) {
@@ -704,6 +797,10 @@ export default function ProductsPage() {
         images,
         video_url: videoUrl || null,
         category_id: categoryId || null,
+        faqs,
+        finish_and_care: finishAndCare,
+        guidelines: guidelinesArr,
+        specifications: specifications.filter(s => s.key.trim()),
       }
       if (editing) {
         await api.patch(`/admin/products/${editing.id}`, body)
@@ -1006,6 +1103,8 @@ export default function ProductsPage() {
               onUpdate={(i, v) => updateOptionModifier(setPaperSizesSel, i, v)}
               onRemove={i => removeOption(setPaperSizesSel, i)}
               comboboxPlaceholder="Select size…"
+              onCreateOption={createPaperSize}
+              createPlaceholder="e.g. A4, A5, 3.5x2 in"
             />
 
             {/* ── Paper Qualities ── */}
@@ -1021,6 +1120,8 @@ export default function ProductsPage() {
               onUpdate={(i, v) => updateOptionModifier(setPaperQualitiesSel, i, v)}
               onRemove={i => removeOption(setPaperQualitiesSel, i)}
               comboboxPlaceholder="Select paper quality…"
+              onCreateOption={createPaperQuality}
+              createPlaceholder="e.g. 300 or 300 GSM (Premium)"
             />
 
             {/* ── Paper Type ── */}
@@ -1036,6 +1137,8 @@ export default function ProductsPage() {
               onUpdate={(i, v) => updateOptionModifier(setPaperTypesSel, i, v)}
               onRemove={i => removeOption(setPaperTypesSel, i)}
               comboboxPlaceholder="Select paper type…"
+              onCreateOption={createPaperType}
+              createPlaceholder="e.g. Glossy, Matte, Kraft"
             />
 
             {/* ── Custom Fields ── */}
@@ -1178,6 +1281,179 @@ export default function ProductsPage() {
                     </Button>
                     <Button type="button" size="sm" variant="outline" onClick={() => setCreatingField(false)}>Cancel</Button>
                   </div>
+                </div>
+              )}
+            </section>
+
+            {/* ── FAQs ── */}
+            <section className="space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <SectionHeader label="FAQs" description="Question & answer pairs displayed on the product page." />
+                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setFaqs(prev => [...prev, { question: '', answer: '' }])}>
+                  <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add FAQ
+                </Button>
+              </div>
+              {faqs.length > 0 && (
+                <div className="space-y-3">
+                  {faqs.map((faq, i) => (
+                    <div key={i} className="rounded-md border p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          placeholder="Question"
+                          value={faq.question}
+                          onChange={e => setFaqs(prev => prev.map((f, idx) => idx === i ? { ...f, question: e.target.value } : f))}
+                          className="flex-1"
+                        />
+                        <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={() => setFaqs(prev => prev.filter((_, idx) => idx !== i))}>
+                          <XIcon className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      <textarea
+                        placeholder="Answer"
+                        value={faq.answer}
+                        onChange={e => setFaqs(prev => prev.map((f, idx) => idx === i ? { ...f, answer: e.target.value } : f))}
+                        className="w-full rounded-md border px-3 py-2 text-sm min-h-[60px] resize-y bg-transparent"
+                        rows={2}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* ── Finish & Care ── */}
+            <section className="space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <SectionHeader label="Finish & Care" description="Bullet points with care instructions." />
+                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setFinishAndCare(prev => [...prev, ''])}>
+                  <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add Point
+                </Button>
+              </div>
+              {finishAndCare.length > 0 && (
+                <div className="space-y-2">
+                  {finishAndCare.map((point, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        placeholder="Care instruction point"
+                        value={point}
+                        onChange={e => setFinishAndCare(prev => prev.map((p, idx) => idx === i ? e.target.value : p))}
+                        className="flex-1"
+                      />
+                      <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={() => setFinishAndCare(prev => prev.filter((_, idx) => idx !== i))}>
+                        <XIcon className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* ── Guidelines ── */}
+            <section className="space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <SectionHeader label="Guidelines" description="Guidelines with icon, title, and description." />
+                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setGuidelinesArr(prev => [...prev, { icon_url: '', title: '', description: '' }])}>
+                  <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add Guideline
+                </Button>
+              </div>
+              {guidelinesArr.length > 0 && (
+                <div className="space-y-3">
+                  {guidelinesArr.map((g, i) => (
+                    <div key={i} className="rounded-md border p-3 space-y-2">
+                      <div className="flex items-start gap-3">
+                        <div className="shrink-0">
+                          {g.icon_url ? (
+                            <div className="relative group">
+                              <img src={g.icon_url} alt="" className="h-14 w-14 rounded-lg object-cover border" />
+                              <button
+                                type="button"
+                                className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => setGuidelinesArr(prev => prev.map((gl, idx) => idx === i ? { ...gl, icon_url: '' } : gl))}
+                              >
+                                <XIcon className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="flex items-center justify-center h-14 w-14 rounded-lg border-2 border-dashed cursor-pointer hover:border-primary/50 transition-colors">
+                              {uploadingGuidelineIcon === i ? (
+                                <span className="text-xs text-muted-foreground">...</span>
+                              ) : (
+                                <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  setUploadingGuidelineIcon(i)
+                                  try {
+                                    const url = await uploadToCloudinary(file, 'image')
+                                    setGuidelinesArr(prev => prev.map((gl, idx) => idx === i ? { ...gl, icon_url: url } : gl))
+                                  } catch (err) {
+                                    toast.error('Icon upload failed')
+                                  } finally {
+                                    setUploadingGuidelineIcon(null)
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-2">
+                          <Input
+                            placeholder="Title"
+                            value={g.title}
+                            onChange={e => setGuidelinesArr(prev => prev.map((gl, idx) => idx === i ? { ...gl, title: e.target.value } : gl))}
+                          />
+                          <textarea
+                            placeholder="Description"
+                            value={g.description}
+                            onChange={e => setGuidelinesArr(prev => prev.map((gl, idx) => idx === i ? { ...gl, description: e.target.value } : gl))}
+                            className="w-full rounded-md border px-3 py-2 text-sm min-h-[50px] resize-y bg-transparent"
+                            rows={2}
+                          />
+                        </div>
+                        <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={() => setGuidelinesArr(prev => prev.filter((_, idx) => idx !== i))}>
+                          <XIcon className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* ── Specifications ── */}
+            <section className="space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <SectionHeader label="Specifications" description="Key-value pairs. Default fields are pre-populated for new products." />
+                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setSpecifications(prev => [...prev, { key: '', value: '' }])}>
+                  <PlusIcon className="h-3.5 w-3.5 mr-1" /> Add Spec
+                </Button>
+              </div>
+              {specifications.length > 0 && (
+                <div className="space-y-2">
+                  {specifications.map((spec, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        placeholder="Key (e.g. Material)"
+                        value={spec.key}
+                        onChange={e => setSpecifications(prev => prev.map((s, idx) => idx === i ? { ...s, key: e.target.value } : s))}
+                        className="w-[180px] shrink-0"
+                      />
+                      <Input
+                        placeholder="Value"
+                        value={spec.value}
+                        onChange={e => setSpecifications(prev => prev.map((s, idx) => idx === i ? { ...s, value: e.target.value } : s))}
+                        className="flex-1"
+                      />
+                      <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={() => setSpecifications(prev => prev.filter((_, idx) => idx !== i))}>
+                        <XIcon className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               )}
             </section>
