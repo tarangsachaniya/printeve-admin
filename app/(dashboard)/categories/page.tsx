@@ -1,274 +1,341 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
-import { PlusIcon, Trash2Icon, PencilIcon, UploadIcon, XIcon, ListIcon } from 'lucide-react'
+import { PlusIcon, PencilIcon, Trash2Icon, UploadIcon, XIcon, ImageIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { uploadToCloudinary } from '@/lib/cloudinary'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter,
+} from '@/components/ui/sheet'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface Category {
   id: string
-  name: string
+  title: string
   slug: string
-  image_url: string | null
+  icon_url: string | null
+  short_description: string | null
   is_active: boolean
   sort_order: number
+  product_count: number
+  created_at: string
+}
+
+function slugify(text: string) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([])
-  const [newName, setNewName] = useState('')
-  const [adding, setAdding] = useState(false)
+  const [open, setOpen]       = useState(false)
+  const [editing, setEditing] = useState<Category | null>(null)
 
-  const [editCategory, setEditCategory] = useState<Category | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editActive, setEditActive] = useState(true)
-  const [editSortOrder, setEditSortOrder] = useState(0)
-  const [editImageUrl, setEditImageUrl] = useState<string | null>(null)
-  const [uploadingImage, setUploadingImage] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const imgInputRef = useRef<HTMLInputElement>(null)
+  const [title, setTitle]                     = useState('')
+  const [slug, setSlug]                       = useState('')
+  const [iconUrl, setIconUrl]                 = useState('')
+  const [shortDescription, setShortDescription] = useState('')
+  const [sortOrder, setSortOrder]             = useState('0')
+  const [isActive, setIsActive]               = useState(true)
+  const [saving, setSaving]                   = useState(false)
+  const [uploading, setUploading]             = useState(false)
+
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const fileRef = useRef<HTMLInputElement>(null)
+  const autoSlug = useRef(true)
 
   function load() {
     api.get<{ items: Category[] }>('/admin/categories')
       .then(r => setCategories(r.items ?? []))
-      .catch((err) => toast.error(err.message ?? 'Failed to load categories'))
+      .catch(err => toast.error(err.message ?? 'Failed to load categories'))
   }
 
   useEffect(() => { load() }, [])
 
-  async function add() {
-    const val = newName.trim()
-    if (!val) return
-    setAdding(true)
-    try {
-      await api.post('/admin/categories', { name: val, sort_order: categories.length })
-      setNewName('')
-      load()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add category')
-    } finally { setAdding(false) }
+  function resetForm() {
+    setTitle('')
+    setSlug('')
+    setIconUrl('')
+    setShortDescription('')
+    setSortOrder('0')
+    setIsActive(true)
+    autoSlug.current = true
   }
 
-  function openEdit(category: Category) {
-    setEditCategory(category)
-    setEditName(category.name)
-    setEditActive(category.is_active)
-    setEditSortOrder(category.sort_order)
-    setEditImageUrl(category.image_url)
+  function openNew() {
+    setEditing(null)
+    resetForm()
+    setSortOrder(String(categories.length))
+    setOpen(true)
   }
 
-  async function saveEdit() {
-    if (!editCategory) return
-    setSaving(true)
-    try {
-      await api.patch(`/admin/categories/${editCategory.id}`, {
-        name: editName.trim(),
-        is_active: editActive,
-        sort_order: editSortOrder,
-        image_url: editImageUrl,
-      })
-      setEditCategory(null)
-      load()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update category')
-    } finally { setSaving(false) }
+  function openEdit(cat: Category) {
+    setEditing(cat)
+    setTitle(cat.title)
+    setSlug(cat.slug)
+    setIconUrl(cat.icon_url ?? '')
+    setShortDescription(cat.short_description ?? '')
+    setSortOrder(String(cat.sort_order))
+    setIsActive(cat.is_active)
+    autoSlug.current = false
+    setOpen(true)
   }
 
-  async function handleImageFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploadingImage(true)
-    try {
-      const url = await uploadToCloudinary(file, 'image', 'printEve/categories')
-      setEditImageUrl(url)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Image upload failed')
-    } finally {
-      setUploadingImage(false)
-      if (imgInputRef.current) imgInputRef.current.value = ''
+  function handleTitleChange(value: string) {
+    setTitle(value)
+    if (autoSlug.current && !editing) {
+      setSlug(slugify(value))
     }
   }
 
-  async function remove(id: string) {
+  async function handleIconUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
     try {
-      await api.delete(`/admin/categories/${id}`)
+      const url = await uploadToCloudinary(file, 'image', 'printEve/categories')
+      setIconUrl(url)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  async function handleSave() {
+    if (!title.trim()) { toast.error('Title is required'); return }
+    setSaving(true)
+    try {
+      const body = {
+        title: title.trim(),
+        slug: slug.trim() || undefined,
+        icon_url: iconUrl || null,
+        short_description: shortDescription.trim() || null,
+        sort_order: Number(sortOrder) || 0,
+        is_active: isActive,
+      }
+      if (editing) {
+        await api.patch(`/admin/categories/${editing.id}`, body)
+        toast.success('Category updated')
+      } else {
+        await api.post('/admin/categories', body)
+        toast.success('Category created')
+      }
+      setOpen(false)
       load()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to delete category')
+      toast.error(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeleting(true)
+    try {
+      await api.delete(`/admin/categories/${id}`)
+      toast.success('Category deleted')
+      setDeleteId(null)
+      load()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete')
+    } finally {
+      setDeleting(false)
     }
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-bold">Categories</h1>
-        <p className="text-sm text-muted-foreground">Product categories shown in the storefront and used when creating products.</p>
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Categories</h1>
+          <p className="text-sm text-muted-foreground">Manage product categories for the storefront.</p>
+        </div>
+        <Button onClick={openNew}>
+          <PlusIcon className="h-4 w-4 mr-1" /> Add Category
+        </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="flex items-center gap-2 px-4 py-3 border-b bg-muted/20">
-            <Input
-              className="flex-1"
-              placeholder="Category name, e.g. Business Cards"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), add())}
-            />
-            <Button size="sm" onClick={add} disabled={adding || !newName.trim()}>
-              <PlusIcon className="h-4 w-4 mr-1" /> Add
-            </Button>
-          </div>
-
-          <Table>
-            <TableHeader>
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16">Icon</TableHead>
+              <TableHead>Title</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead className="w-20 text-center">Order</TableHead>
+              <TableHead className="w-24 text-center">Status</TableHead>
+              <TableHead className="w-24 text-center">Products</TableHead>
+              <TableHead className="w-24 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {categories.length === 0 && (
               <TableRow>
-                <TableHead className="w-8">#</TableHead>
-                <TableHead className="w-12">Image</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-20 text-right">Actions</TableHead>
+                <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                  No categories yet. Click &quot;Add Category&quot; to create one.
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {categories.map((category, i) => (
-                <TableRow key={category.id}>
-                  <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
-                  <TableCell>
-                    {category.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={category.image_url} alt="" className="h-8 w-8 rounded object-cover" />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="font-medium">{category.name}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{category.slug}</TableCell>
-                  <TableCell>
-                    <Badge variant={category.is_active ? 'default' : 'secondary'}>
-                      {category.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Link
-                        href={`/categories/${category.id}/fields`}
-                        title="Manage fields"
-                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                      >
-                        <ListIcon className="h-4 w-4" />
-                      </Link>
-                      <button
-                        onClick={() => openEdit(category)}
-                        className="text-muted-foreground hover:text-foreground transition-colors p-1"
-                      >
-                        <PencilIcon className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => remove(category.id)}
-                        className="text-muted-foreground hover:text-destructive transition-colors p-1"
-                      >
-                        <Trash2Icon className="h-4 w-4" />
-                      </button>
+            )}
+            {categories.map(cat => (
+              <TableRow key={cat.id}>
+                <TableCell>
+                  {cat.icon_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={cat.icon_url} alt="" className="h-8 w-8 rounded object-contain" />
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center rounded bg-muted">
+                      <ImageIcon className="h-4 w-4 text-muted-foreground" />
                     </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {categories.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8 text-sm">
-                    No categories yet
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                  )}
+                </TableCell>
+                <TableCell className="font-medium">{cat.title}</TableCell>
+                <TableCell className="text-muted-foreground text-sm max-w-xs truncate">
+                  {cat.short_description ?? '—'}
+                </TableCell>
+                <TableCell className="text-center">{cat.sort_order}</TableCell>
+                <TableCell className="text-center">
+                  <Badge variant={cat.is_active ? 'default' : 'secondary'}>
+                    {cat.is_active ? 'Active' : 'Inactive'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-center">{cat.product_count}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(cat)}>
+                      <PencilIcon className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => setDeleteId(cat.id)}>
+                      <Trash2Icon className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
-      <Dialog open={!!editCategory} onOpenChange={open => !open && setEditCategory(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Category</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
+      {/* Create / Edit Sheet */}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent style={{ width: '420px' }}>
+          <SheetHeader>
+            <SheetTitle>{editing ? 'Edit Category' : 'New Category'}</SheetTitle>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-5">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-name">Category Name</Label>
+              <Label>Title *</Label>
               <Input
-                id="edit-name"
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), saveEdit())}
+                value={title}
+                onChange={e => handleTitleChange(e.target.value)}
+                placeholder="e.g. Marketing Materials"
               />
             </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="edit-sort">Sort Order</Label>
+              <Label>Slug</Label>
               <Input
-                id="edit-sort"
-                type="number"
-                value={editSortOrder}
-                onChange={e => setEditSortOrder(Number(e.target.value))}
+                value={slug}
+                onChange={e => { setSlug(e.target.value); autoSlug.current = false }}
+                placeholder="auto-generated"
               />
             </div>
+
             <div className="space-y-1.5">
-              <Label>Image</Label>
-              <p className="text-xs text-muted-foreground">
-                Optional. If no image is uploaded, the storefront falls back to a built-in icon.
-              </p>
-              <input ref={imgInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
-              {editImageUrl ? (
+              <Label>Icon / Image</Label>
+              {iconUrl ? (
                 <div className="flex items-center gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={editImageUrl} alt="" className="h-12 w-12 rounded object-cover border" />
-                  <Button type="button" variant="outline" size="sm" onClick={() => imgInputRef.current?.click()} disabled={uploadingImage}>
-                    {uploadingImage ? 'Uploading…' : 'Replace'}
-                  </Button>
-                  <Button type="button" variant="ghost" size="icon-sm" onClick={() => setEditImageUrl(null)}>
-                    <XIcon className="h-3.5 w-3.5" />
+                  <img src={iconUrl} alt="" className="h-14 w-14 rounded-lg border object-contain p-1" />
+                  <Button variant="ghost" size="sm" onClick={() => setIconUrl('')}>
+                    <XIcon className="h-4 w-4 mr-1" /> Remove
                   </Button>
                 </div>
               ) : (
-                <Button type="button" variant="outline" size="sm" onClick={() => imgInputRef.current?.click()} disabled={uploadingImage}>
-                  <UploadIcon className="h-3.5 w-3.5 mr-1" />
-                  {uploadingImage ? 'Uploading…' : 'Upload image'}
-                </Button>
+                <div>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*,.svg"
+                    className="hidden"
+                    onChange={handleIconUpload}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    <UploadIcon className="h-4 w-4 mr-1" />
+                    {uploading ? 'Uploading...' : 'Upload Icon'}
+                  </Button>
+                </div>
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <input
-                id="edit-active"
-                type="checkbox"
-                checked={editActive}
-                onChange={e => setEditActive(e.target.checked)}
-                className="h-4 w-4 rounded border-input accent-primary"
+
+            <div className="space-y-1.5">
+              <Label>Short Description</Label>
+              <textarea
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                value={shortDescription}
+                onChange={e => setShortDescription(e.target.value)}
+                placeholder="A brief description of this category"
               />
-              <Label htmlFor="edit-active" className="cursor-pointer">
-                Active — show in storefront and product forms
-              </Label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Sort Order</Label>
+                <Input
+                  type="number"
+                  value={sortOrder}
+                  onChange={e => setSortOrder(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <label className="flex items-center gap-2 h-10 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={e => setIsActive(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm">Active</span>
+                </label>
+              </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditCategory(null)}>Cancel</Button>
-            <Button onClick={saveEdit} disabled={saving || !editName.trim()}>
-              {saving ? 'Saving…' : 'Save'}
+
+          <SheetFooter className="mt-6">
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saving || !title.trim()}>
+              {saving ? 'Saving...' : editing ? 'Update' : 'Create'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        onOpenChange={open => !open && setDeleteId(null)}
+        title="Delete category?"
+        description="Products in this category will be unassigned (not deleted)."
+        confirmLabel="Delete"
+        onConfirm={() => deleteId && handleDelete(deleteId)}
+        loading={deleting}
+      />
     </div>
   )
 }

@@ -23,7 +23,7 @@ export async function uploadToCloudinary(file: File, type: 'image' | 'video', fo
     throw new Error('Cloudinary is not configured (check NEXT_PUBLIC_CLOUDINARY_* env vars)')
 
   const fd = new FormData()
-  if (type === 'image') {
+  if (type === 'image' && file.type !== 'image/svg+xml') {
     const webp = await toWebP(file)
     fd.append('file', webp, file.name.replace(/\.[^.]+$/, '.webp'))
   } else {
