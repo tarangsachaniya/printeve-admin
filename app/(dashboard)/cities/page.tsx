@@ -15,7 +15,6 @@ import { Badge } from '@/components/ui/badge'
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface City {
   id: string
@@ -24,24 +23,18 @@ interface City {
   is_active: boolean
   price: number | null
   sort_order: number
-  price: number | null
 }
 
 export default function CitiesPage() {
   const [cities,  setCities]  = useState<City[]>([])
   const [newName, setNewName] = useState('')
-  const [newPrice, setNewPrice] = useState('')
   const [adding,  setAdding]  = useState(false)
 
-  const [editCity,  setEditCity]  = useState<City | null>(null)
-  const [editName,  setEditName]  = useState('')
-  const [editPrice, setEditPrice] = useState('')
+  const [editCity,   setEditCity]   = useState<City | null>(null)
+  const [editName,   setEditName]   = useState('')
   const [editActive, setEditActive] = useState(true)
   const [editPrice,  setEditPrice]  = useState<string>('')
   const [saving,     setSaving]     = useState(false)
-
-  const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
   function load() {
     api.get<{ items: City[] }>('/admin/cities')
@@ -56,13 +49,8 @@ export default function CitiesPage() {
     if (!val) return
     setAdding(true)
     try {
-      await api.post('/admin/cities', { 
-        name: val, 
-        sort_order: cities.length,
-        price: newPrice ? Number(newPrice) : null
-      })
+      await api.post('/admin/cities', { name: val, sort_order: cities.length })
       setNewName('')
-      setNewPrice('')
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add city')
@@ -72,7 +60,6 @@ export default function CitiesPage() {
   function openEdit(city: City) {
     setEditCity(city)
     setEditName(city.name)
-    setEditPrice(city.price?.toString() ?? '')
     setEditActive(city.is_active)
     setEditPrice(city.price != null ? String(city.price) : '')
   }
@@ -83,7 +70,6 @@ export default function CitiesPage() {
     try {
       await api.patch(`/admin/cities/${editCity.id}`, {
         name:      editName.trim(),
-        price:     editPrice ? Number(editPrice) : null,
         is_active: editActive,
         price:     editPrice.trim() !== '' ? Number(editPrice) : null,
       })
@@ -95,15 +81,11 @@ export default function CitiesPage() {
   }
 
   async function remove(id: string) {
-    setDeleting(true)
     try {
       await api.delete(`/admin/cities/${id}`)
-      setDeleteId(null)
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete city')
-    } finally {
-      setDeleting(false)
     }
   }
 
@@ -124,14 +106,6 @@ export default function CitiesPage() {
               onChange={e => setNewName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), add())}
             />
-            <Input
-              className="w-36"
-              type="number"
-              placeholder="Del. Price/km"
-              value={newPrice}
-              onChange={e => setNewPrice(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), add())}
-            />
             <Button size="sm" onClick={add} disabled={adding || !newName.trim()}>
               <PlusIcon className="h-4 w-4 mr-1" /> Add
             </Button>
@@ -143,7 +117,6 @@ export default function CitiesPage() {
                 <TableHead className="w-8">#</TableHead>
                 <TableHead>City Name</TableHead>
                 <TableHead>State</TableHead>
-                <TableHead>Del. Price/km</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Delivery Price</TableHead>
                 <TableHead className="w-20 text-right">Actions</TableHead>
@@ -155,7 +128,6 @@ export default function CitiesPage() {
                   <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
                   <TableCell className="font-medium">{city.name}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">{city.state}</TableCell>
-                  <TableCell className="font-medium">{city.price != null ? `₹${city.price}` : '—'}</TableCell>
                   <TableCell>
                     <Badge variant={city.is_active ? 'default' : 'secondary'}>
                       {city.is_active ? 'Active' : 'Inactive'}
@@ -173,7 +145,7 @@ export default function CitiesPage() {
                         <PencilIcon className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => setDeleteId(city.id)}
+                        onClick={() => remove(city.id)}
                         className="text-muted-foreground hover:text-destructive transition-colors p-1"
                       >
                         <Trash2Icon className="h-4 w-4" />
@@ -209,17 +181,6 @@ export default function CitiesPage() {
                 onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), saveEdit())}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-price">Delivery Price / km (₹)</Label>
-              <Input
-                id="edit-price"
-                type="number"
-                value={editPrice}
-                onChange={e => setEditPrice(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), saveEdit())}
-                placeholder="Optional"
-              />
-            </div>
             <div className="flex items-center gap-3">
               <input
                 id="edit-active"
@@ -253,15 +214,6 @@ export default function CitiesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <ConfirmDialog
-        open={deleteId !== null}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-        title="Delete city?"
-        description="This city will be permanently removed and can no longer be used for city-based pricing."
-        loading={deleting}
-        onConfirm={() => deleteId && remove(deleteId)}
-      />
     </div>
   )
 }
