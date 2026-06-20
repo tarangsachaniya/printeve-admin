@@ -12,7 +12,6 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Card, CardContent } from '@/components/ui/card'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface PaperType { id: string; name: string; sort_order: number }
 
@@ -20,8 +19,6 @@ export default function PaperTypesPage() {
   const [types,   setTypes]   = useState<PaperType[]>([])
   const [newType, setNewType] = useState('')
   const [adding,  setAdding]  = useState(false)
-  const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
   function load() {
     api.get<{ items: PaperType[] }>('/admin/paper/types')
@@ -46,16 +43,12 @@ export default function PaperTypesPage() {
   }
 
   async function remove(id: string) {
-    setDeleting(true)
     try {
       await api.delete(`/admin/paper/types/${id}`)
       invalidatePaperCache()
-      setDeleteId(null)
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete paper type')
-    } finally {
-      setDeleting(false)
     }
   }
 
@@ -100,7 +93,7 @@ export default function PaperTypesPage() {
                   <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
                   <TableCell className="font-medium">{t.name}</TableCell>
                   <TableCell className="text-right">
-                    <button onClick={() => setDeleteId(t.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                    <button onClick={() => remove(t.id)} className="text-muted-foreground hover:text-destructive transition-colors">
                       <Trash2Icon className="h-4 w-4" />
                     </button>
                   </TableCell>
@@ -115,15 +108,6 @@ export default function PaperTypesPage() {
           </Table>
         </CardContent>
       </Card>
-
-      <ConfirmDialog
-        open={deleteId !== null}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-        title="Delete paper type?"
-        description="This paper type will be permanently removed and can no longer be used for products."
-        loading={deleting}
-        onConfirm={() => deleteId && remove(deleteId)}
-      />
     </div>
   )
 }

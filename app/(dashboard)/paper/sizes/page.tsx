@@ -13,7 +13,6 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { Card, CardContent } from '@/components/ui/card'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 type Unit = 'mm' | 'cm' | 'in'
 
@@ -65,8 +64,6 @@ export default function PaperSizesPage() {
   const [custUnit,   setCustUnit]   = useState<Unit>('mm')
   const [custName,   setCustName]   = useState('')
   const [adding, setAdding] = useState(false)
-  const [deleteId, setDeleteId] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
   function load() {
     api.get<{ items: PaperSize[] }>('/admin/paper/sizes')
@@ -107,16 +104,12 @@ export default function PaperSizesPage() {
   }
 
   async function remove(id: string) {
-    setDeleting(true)
     try {
       await api.delete(`/admin/paper/sizes/${id}`)
       invalidatePaperCache()
-      setDeleteId(null)
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete size')
-    } finally {
-      setDeleting(false)
     }
   }
 
@@ -223,7 +216,7 @@ export default function PaperSizesPage() {
                   <TableCell className="font-medium">{s.name}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{dimLabel(s)}</TableCell>
                   <TableCell className="text-right">
-                    <button onClick={() => setDeleteId(s.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                    <button onClick={() => remove(s.id)} className="text-muted-foreground hover:text-destructive transition-colors">
                       <Trash2Icon className="h-4 w-4" />
                     </button>
                   </TableCell>
@@ -238,15 +231,6 @@ export default function PaperSizesPage() {
           </Table>
         </CardContent>
       </Card>
-
-      <ConfirmDialog
-        open={deleteId !== null}
-        onOpenChange={(open) => !open && setDeleteId(null)}
-        title="Delete paper size?"
-        description="This size will be permanently removed and can no longer be used for products."
-        loading={deleting}
-        onConfirm={() => deleteId && remove(deleteId)}
-      />
     </div>
   )
 }

@@ -1,14 +1,12 @@
 export interface AdminUser {
   sub: string
   role: 'admin' | 'super_admin'
-  email?: string
-  full_name?: string
 }
 
 function parseJwt(token: string): AdminUser | null {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]))
-    return { sub: payload.sub, role: payload.role, email: payload.email, full_name: payload.full_name }
+    return { sub: payload.sub, role: payload.role }
   } catch {
     return null
   }
