@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { CheckIcon, ChevronDownIcon, SearchIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -30,8 +31,10 @@ export function Combobox({
 }: ComboboxProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 })
 
   const filtered = query
     ? options.filter(o => o.label.toLowerCase().includes(query.toLowerCase()))
@@ -39,18 +42,31 @@ export function Combobox({
 
   const selected = options.find(o => o.value === value)
 
-  useEffect(() => {
-    if (open) inputRef.current?.focus()
-  }, [open])
+  const updatePos = useCallback(() => {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+  }, [])
 
   useEffect(() => {
-    function handleOut(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-        setQuery('')
-      }
+    if (open) {
+      updatePos()
+      inputRef.current?.focus()
     }
-    if (open) document.addEventListener('mousedown', handleOut)
+  }, [open, updatePos])
+
+  useEffect(() => {
+    if (!open) return
+    function handleOut(e: MouseEvent) {
+      const target = e.target as Node
+      if (
+        triggerRef.current?.contains(target) ||
+        dropdownRef.current?.contains(target)
+      ) return
+      setOpen(false)
+      setQuery('')
+    }
+    document.addEventListener('mousedown', handleOut)
     return () => document.removeEventListener('mousedown', handleOut)
   }, [open])
 
@@ -61,11 +77,12 @@ export function Combobox({
   }
 
   return (
-    <div ref={containerRef} className={cn('relative w-full', className)}>
+    <div className={cn('relative w-full', className)}>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && setOpen(v => !v)}
+        onClick={() => { if (!disabled) { updatePos(); setOpen(v => !v) } }}
         className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className={cn('truncate', !selected && 'text-muted-foreground')}>
@@ -74,8 +91,12 @@ export function Combobox({
         <ChevronDownIcon className={cn('ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
 
-      {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md">
+      {open && createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed z-50 rounded-md border bg-popover text-popover-foreground shadow-md"
+          style={{ top: pos.top, left: pos.left, width: pos.width }}
+        >
           <div className="flex items-center gap-2 border-b px-3 py-2">
             <SearchIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <input
@@ -104,7 +125,8 @@ export function Combobox({
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

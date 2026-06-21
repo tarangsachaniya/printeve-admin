@@ -164,7 +164,7 @@ export default function ProductRequestsPage() {
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">{r.name}</TableCell>
                   <TableCell>{r.printer_name ?? '—'}</TableCell>
-                  <TableCell>₹{Number(r.base_price).toLocaleString('en-IN')}</TableCell>
+                  <TableCell>{Number.isFinite(Number(r.base_price)) ? `₹${Number(r.base_price).toLocaleString('en-IN')}` : '—'}</TableCell>
                   <TableCell><Badge variant={statusVariant(r.status)}>{r.status}</Badge></TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {new Date(r.created_at).toLocaleString()}

@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
   Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag, MapPin, Truck,
-  ChevronDown, LayoutGrid, TicketPercent,
+  ChevronDown, MonitorPlay, LayoutGrid, Globe, FileText, Navigation, Settings2, ScrollText, TicketPercent,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
@@ -37,9 +37,9 @@ const customerNavItems: NavItem[] = [
 const productNavItems: NavItem[] = [
   { href: '/categories', label: 'Categories', icon: LayoutGrid },
   { href: '/products',   label: 'Products',   icon: Package },
+  { href: '/field-definitions', label: 'Field Definitions', icon: Layers },
   { href: '/product-requests', label: 'Product requests', icon: Inbox, badgeKey: 'productRequests' },
   { href: '/product-price-requests', label: 'Price requests', icon: Tag, badgeKey: 'priceRequests' },
-  { href: '/paper',  label: 'Paper',  icon: Layers },
   { href: '/cities', label: 'Cities', icon: MapPin },
 ]
 
@@ -48,7 +48,18 @@ const otherNavItems: NavItem[] = [
   { href: '/payments',    label: 'Payments',    icon: CreditCard },
   { href: '/promo-codes', label: 'Promo Codes', icon: TicketPercent },
   { href: '/reports',     label: 'Reports',     icon: BarChart2 },
-  { href: '/settings',    label: 'Settings',    icon: Settings },
+]
+
+const settingsNavItems: NavItem[] = [
+  { href: '/settings',  label: 'Content Settings', icon: Settings },
+]
+
+const cmsNavItems: NavItem[] = [
+  { href: '/website',                         label: 'Pages',                icon: FileText,   superAdminOnly: true },
+  { href: '/settings/homepage-navigation',    label: 'Homepage & Navigation', icon: MonitorPlay, superAdminOnly: true },
+  { href: '/website/navigation',              label: 'Navbar & Footer',      icon: Navigation, superAdminOnly: true },
+  { href: '/website/settings',                label: 'Site Settings',        icon: Settings2,  superAdminOnly: true },
+  { href: '/website/logs',                    label: 'Audit Logs',           icon: ScrollText, superAdminOnly: true },
 ]
 
 function NavLink({
@@ -193,6 +204,24 @@ export function AppSidebar() {
           ))}
         </div>
 
+        <NavGroup
+          label="Settings"
+          items={settingsNavItems}
+          pathname={pathname}
+          badges={{}}
+          defaultOpen={false}
+        />
+
+        {isSuperAdmin && (
+          <NavGroup
+            label="Website"
+            items={cmsNavItems}
+            pathname={pathname}
+            badges={{}}
+            defaultOpen={false}
+          />
+        )}
+
         <button
           type="button"
           onClick={handleClearCache}
@@ -207,7 +236,9 @@ export function AppSidebar() {
 
       <div className="px-3 py-4 border-t">
         <div className="px-3 py-2 text-xs text-muted-foreground mb-2">
-          {user?.role?.replace('_', ' ').toUpperCase()}
+          {user?.full_name && <p className="text-sm font-medium text-foreground">{user.full_name}</p>}
+          {user?.email && <p className="truncate">{user.email}</p>}
+          <p>{user?.role?.replace('_', ' ').toUpperCase()}</p>
         </div>
         <Button
           variant="ghost"

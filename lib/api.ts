@@ -28,6 +28,31 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (json.data ?? json) as T
 }
 
+async function apiRawFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = getToken()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init.headers as Record<string, string>),
+  }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers })
+
+  if (res.status === 401) {
+    document.cookie = 'admin_token=; Max-Age=0; path=/'
+    window.location.href = '/login'
+    throw new Error('Unauthorized')
+  }
+
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error ?? 'Request failed')
+  return json as T
+}
+
+export const apiRaw = {
+  get: <T>(path: string) => apiRawFetch<T>(path),
+}
+
 export const api = {
   get:    <T>(path: string) =>
     apiFetch<T>(path),
