@@ -64,9 +64,9 @@ export default function CategoriesPage() {
 
   function openEdit(category: Category) {
     setEditCategory(category)
-    setEditName(category.name)
-    setEditActive(category.is_active)
-    setEditSortOrder(category.sort_order)
+    setEditName(category.name ?? '')
+    setEditActive(category.is_active ?? true)
+    setEditSortOrder(category.sort_order ?? 0)
     setEditImageUrl(category.image_url)
   }
 
@@ -75,7 +75,7 @@ export default function CategoriesPage() {
     setSaving(true)
     try {
       await api.patch(`/admin/categories/${editCategory.id}`, {
-        name: editName.trim(),
+        name: (editName ?? '').trim(),
         is_active: editActive,
         sort_order: editSortOrder,
         image_url: editImageUrl,
@@ -256,7 +256,7 @@ export default function CategoriesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditCategory(null)}>Cancel</Button>
-            <Button onClick={saveEdit} disabled={saving || !editName.trim()}>
+            <Button onClick={saveEdit} disabled={saving || !(editName ?? '').trim()}>
               {saving ? 'Saving…' : 'Save'}
             </Button>
           </DialogFooter>
