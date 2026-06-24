@@ -20,9 +20,9 @@ import {
 
 interface Category {
   id: string
-  name: string
+  title: string
   slug: string
-  image_url: string | null
+  icon_url: string | null
   is_active: boolean
   sort_order: number
 }
@@ -36,7 +36,7 @@ export default function CategoriesPage() {
   const [editName, setEditName] = useState('')
   const [editActive, setEditActive] = useState(true)
   const [editSortOrder, setEditSortOrder] = useState(0)
-  const [editImageUrl, setEditImageUrl] = useState<string | null>(null)
+  const [editIconUrl, setEditIconUrl] = useState<string | null>(null)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [saving, setSaving] = useState(false)
   const imgInputRef = useRef<HTMLInputElement>(null)
@@ -54,7 +54,7 @@ export default function CategoriesPage() {
     if (!val) return
     setAdding(true)
     try {
-      await api.post('/admin/categories', { name: val, sort_order: categories.length })
+      await api.post('/admin/categories', { title: val, sort_order: categories.length })
       setNewName('')
       load()
     } catch (err) {
@@ -64,10 +64,10 @@ export default function CategoriesPage() {
 
   function openEdit(category: Category) {
     setEditCategory(category)
-    setEditName(category.name ?? '')
+    setEditName(category.title ?? '')
     setEditActive(category.is_active ?? true)
     setEditSortOrder(category.sort_order ?? 0)
-    setEditImageUrl(category.image_url)
+    setEditIconUrl(category.icon_url)
   }
 
   async function saveEdit() {
@@ -75,10 +75,10 @@ export default function CategoriesPage() {
     setSaving(true)
     try {
       await api.patch(`/admin/categories/${editCategory.id}`, {
-        name: (editName ?? '').trim(),
+        title: (editName ?? '').trim(),
         is_active: editActive,
         sort_order: editSortOrder,
-        image_url: editImageUrl,
+        icon_url: editIconUrl,
       })
       setEditCategory(null)
       load()
@@ -93,7 +93,7 @@ export default function CategoriesPage() {
     setUploadingImage(true)
     try {
       const url = await uploadToCloudinary(file, 'image', 'printEve/categories')
-      setEditImageUrl(url)
+      setEditIconUrl(url)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Image upload failed')
     } finally {
@@ -149,14 +149,14 @@ export default function CategoriesPage() {
                 <TableRow key={category.id}>
                   <TableCell className="text-muted-foreground text-xs">{i + 1}</TableCell>
                   <TableCell>
-                    {category.image_url ? (
+                    {category.icon_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={category.image_url} alt="" className="h-8 w-8 rounded object-cover" />
+                      <img src={category.icon_url} alt="" className="h-8 w-8 rounded object-cover" />
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="font-medium">{category.name}</TableCell>
+                  <TableCell className="font-medium">{category.title}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">{category.slug}</TableCell>
                   <TableCell>
                     <Badge variant={category.is_active ? 'default' : 'secondary'}>
@@ -223,14 +223,14 @@ export default function CategoriesPage() {
                 Optional. If no image is uploaded, the storefront falls back to a built-in icon.
               </p>
               <input ref={imgInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
-              {editImageUrl ? (
+              {editIconUrl ? (
                 <div className="flex items-center gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={editImageUrl} alt="" className="h-12 w-12 rounded object-cover border" />
+                  <img src={editIconUrl} alt="" className="h-12 w-12 rounded object-cover border" />
                   <Button type="button" variant="outline" size="sm" onClick={() => imgInputRef.current?.click()} disabled={uploadingImage}>
                     {uploadingImage ? 'Uploading…' : 'Replace'}
                   </Button>
-                  <Button type="button" variant="ghost" size="icon-sm" onClick={() => setEditImageUrl(null)}>
+                  <Button type="button" variant="ghost" size="icon-sm" onClick={() => setEditIconUrl(null)}>
                     <XIcon className="h-3.5 w-3.5" />
                   </Button>
                 </div>
