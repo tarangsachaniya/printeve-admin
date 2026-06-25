@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   LayoutDashboard, Users, ShoppingBag, Printer, CreditCard,
   Package, BarChart2, ShieldCheck, LogOut, Settings, Layers, Inbox, RefreshCcw, Tag, MapPin, Truck,
-  ChevronDown, MonitorPlay, LayoutGrid, Globe, FileText, Navigation, Settings2, ScrollText, TicketPercent, Radio,
+  ChevronDown, MonitorPlay, LayoutGrid, Globe, FileText, Navigation, Settings2, ScrollText, TicketPercent,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getCurrentUser, type AdminUser } from '@/lib/auth'
@@ -52,7 +52,6 @@ const otherNavItems: NavItem[] = [
 
 const settingsNavItems: NavItem[] = [
   { href: '/settings',  label: 'Content Settings', icon: Settings },
-  { href: '/order-assignment', label: 'Order Assignment', icon: Radio, superAdminOnly: true },
 ]
 
 const cmsNavItems: NavItem[] = [

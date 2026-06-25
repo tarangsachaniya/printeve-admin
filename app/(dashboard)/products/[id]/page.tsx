@@ -335,9 +335,9 @@ export default function EditProductPage() {
   if (loading) return <div className="p-6 text-muted-foreground">Loading…</div>
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl pb-24">
+    <div className="p-6 max-w-7xl pb-24">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <Link href="/products" className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-5 w-5" />
@@ -360,6 +360,10 @@ export default function EditProductPage() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 items-start">
+        {/* ── Left column: Basic Info, Options, Content ── */}
+        <div className="space-y-6 lg:col-span-2">
 
       {/* ── Basic Info ── */}
       <Card>
@@ -470,80 +474,6 @@ export default function EditProductPage() {
         </CardContent>
       </Card>
 
-      {/* ── Pricing Matrix ── */}
-      <Card>
-        <CardContent className="pt-6 space-y-4">
-          <SectionHeader label="Pricing Matrix" description="Each group represents one option combination. Add quantity→price tiers within each group." />
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={addPricingGroup}><PlusIcon className="h-3.5 w-3.5 mr-1" /> Add Pricing Group</Button>
-            <Button variant="outline" size="sm" onClick={generateAllCombinations}><WandSparklesIcon className="h-3.5 w-3.5 mr-1" /> Generate All Combinations</Button>
-          </div>
-          {pricingGroups.length === 0 && <p className="text-sm text-muted-foreground">No pricing groups yet.</p>}
-          {pricingGroups.map((group, gi) => (
-            <div key={gi} className="rounded-md border">
-              <div className="flex items-center gap-2 px-4 py-3 bg-muted/30 cursor-pointer" onClick={() => toggleGroupCollapse(gi)}>
-                {group.collapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                <span className="text-sm font-medium flex-1">{getGroupLabel(group)}</span>
-                <span className="text-xs text-muted-foreground">{group.tiers.length} tier{group.tiers.length !== 1 ? 's' : ''}</span>
-                <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); removePricingGroup(gi) }}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
-              </div>
-              {!group.collapsed && (
-                <div className="p-4 space-y-4">
-                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-                    {productOptions.map(opt => {
-                      const fd = getFieldDef(opt.field_definition_id)
-                      if (!fd) return null
-                      const selectedValue = getSelectedValueForField(group, fd.id)
-                      const availableValues = fd.field_option_values.filter(v => opt.value_ids.includes(v.id)).sort((a, b) => a.sort_order - b.sort_order)
-                      const selectedLabel = availableValues.find(v => v.id === selectedValue)?.value
-                      return (
-                        <div key={fd.id}>
-                          <Label className="text-xs">{fd.label}</Label>
-                          <Select value={selectedValue} onValueChange={v => { if (v) updateGroupOptionValue(gi, fd.id, v) }}>
-                            <SelectTrigger className="mt-1 h-9 text-sm">
-                              <span className={selectedLabel ? '' : 'text-muted-foreground'}>{selectedLabel ?? `Select ${fd.label}`}</span>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableValues.map(v => (
-                                <SelectItem key={v.id} value={v.id}>{v.value}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )
-                    })}
-                    <div>
-                      <Label className="text-xs">City</Label>
-                      <Select value={group.city_id ?? '__all__'} onValueChange={v => updateGroupCity(gi, v === '__all__' ? null : v)}>
-                        <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__all__">All Cities</SelectItem>
-                          {cities.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs font-medium text-muted-foreground mb-1 px-1">
-                      <span>Quantity</span><span>Price (₹)</span><span>Completion (min)</span><span></span>
-                    </div>
-                    {group.tiers.map((tier, ti) => (
-                      <div key={ti} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 mb-1.5">
-                        <Input type="number" min={1} placeholder="25" value={tier.quantity} onChange={e => updateTier(gi, ti, 'quantity', e.target.value)} className="h-9" />
-                        <Input type="number" min={0} step={0.01} placeholder="120" value={tier.price} onChange={e => updateTier(gi, ti, 'price', e.target.value)} className="h-9" />
-                        <Input type="number" min={0} placeholder="Optional" value={tier.max_completion_minutes} onChange={e => updateTier(gi, ti, 'max_completion_minutes', e.target.value)} className="h-9" />
-                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => removeTier(gi, ti)} disabled={group.tiers.length <= 1}><XIcon className="h-3.5 w-3.5" /></Button>
-                      </div>
-                    ))}
-                    <Button variant="outline" size="sm" className="mt-1" onClick={() => addTier(gi)}><PlusIcon className="h-3.5 w-3.5 mr-1" /> Add Tier</Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
       {/* ── Content ── */}
       <Card>
         <CardContent className="pt-6 space-y-5">
@@ -605,6 +535,85 @@ export default function EditProductPage() {
           </div>
         </CardContent>
       </Card>
+
+        </div>{/* end left column */}
+
+        {/* ── Right column: Pricing Matrix (sticky) ── */}
+        <div className="lg:col-span-1 lg:sticky lg:top-6 self-start">
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <SectionHeader label="Pricing Matrix" description="Each group represents one option combination. Add quantity→price tiers within each group." />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" onClick={addPricingGroup}><PlusIcon className="h-3.5 w-3.5 mr-1" /> Add Pricing Group</Button>
+                <Button variant="outline" size="sm" onClick={generateAllCombinations}><WandSparklesIcon className="h-3.5 w-3.5 mr-1" /> Generate All Combinations</Button>
+              </div>
+              {pricingGroups.length === 0 && <p className="text-sm text-muted-foreground">No pricing groups yet.</p>}
+              {pricingGroups.map((group, gi) => (
+                <div key={gi} className="rounded-md border">
+                  <div className="flex items-center gap-2 px-4 py-3 bg-muted/30 cursor-pointer" onClick={() => toggleGroupCollapse(gi)}>
+                    {group.collapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                    <span className="text-sm font-medium flex-1">{getGroupLabel(group)}</span>
+                    <span className="text-xs text-muted-foreground">{group.tiers.length} tier{group.tiers.length !== 1 ? 's' : ''}</span>
+                    <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); removePricingGroup(gi) }}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                  </div>
+                  {!group.collapsed && (
+                    <div className="p-4 space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        {productOptions.map(opt => {
+                          const fd = getFieldDef(opt.field_definition_id)
+                          if (!fd) return null
+                          const selectedValue = getSelectedValueForField(group, fd.id)
+                          const availableValues = fd.field_option_values.filter(v => opt.value_ids.includes(v.id)).sort((a, b) => a.sort_order - b.sort_order)
+                          const selectedLabel = availableValues.find(v => v.id === selectedValue)?.value
+                          return (
+                            <div key={fd.id}>
+                              <Label className="text-xs">{fd.label}</Label>
+                              <Select value={selectedValue} onValueChange={v => { if (v) updateGroupOptionValue(gi, fd.id, v) }}>
+                                <SelectTrigger className="mt-1 h-9 text-sm">
+                                  <span className={selectedLabel ? '' : 'text-muted-foreground'}>{selectedLabel ?? `Select ${fd.label}`}</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableValues.map(v => (
+                                    <SelectItem key={v.id} value={v.id}>{v.value}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )
+                        })}
+                        <div>
+                          <Label className="text-xs">City</Label>
+                          <Select value={group.city_id ?? '__all__'} onValueChange={v => updateGroupCity(gi, v === '__all__' ? null : v)}>
+                            <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__all__">All Cities</SelectItem>
+                              {cities.map(c => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs font-medium text-muted-foreground mb-1 px-1">
+                          <span>Quantity</span><span>Price (₹)</span><span>Completion (min)</span><span></span>
+                        </div>
+                        {group.tiers.map((tier, ti) => (
+                          <div key={ti} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 mb-1.5">
+                            <Input type="number" min={1} placeholder="25" value={tier.quantity} onChange={e => updateTier(gi, ti, 'quantity', e.target.value)} className="h-9" />
+                            <Input type="number" min={0} step={0.01} placeholder="120" value={tier.price} onChange={e => updateTier(gi, ti, 'price', e.target.value)} className="h-9" />
+                            <Input type="number" min={0} placeholder="Optional" value={tier.max_completion_minutes} onChange={e => updateTier(gi, ti, 'max_completion_minutes', e.target.value)} className="h-9" />
+                            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => removeTier(gi, ti)} disabled={group.tiers.length <= 1}><XIcon className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        ))}
+                        <Button variant="outline" size="sm" className="mt-1" onClick={() => addTier(gi)}><PlusIcon className="h-3.5 w-3.5 mr-1" /> Add Tier</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>{/* end right column */}
+      </div>{/* end grid */}
 
       {/* ── Sticky Footer ── */}
       <div className="fixed bottom-0 left-0 right-0 border-t bg-background px-6 py-3 flex items-center justify-end gap-3 z-10">

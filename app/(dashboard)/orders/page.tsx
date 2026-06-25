@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { getCurrentUser, type AdminUser } from '@/lib/auth'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -13,19 +15,76 @@ import {
 import { DataTableSearch, DataTablePagination } from '@/components/data-table-controls'
 import { RefreshButton } from '@/components/refresh-button'
 import { useAutoRefresh } from '@/hooks/use-auto-refresh'
+import { OrderAssignmentConfigForm } from '@/components/order-assignment-config'
 
 interface Order {
   id: string
-  user_id: string
-  total_amount: number
+  customer_id: string
+  total: number
   status: string
+  assignment_type: string | null
+  printer_id: string | null
   created_at: string
 }
 
-const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled']
+const ORDER_STATUSES = [
+  'pending',
+  'pending_printer_acceptance',
+  'assigned',
+  'confirmed',
+  'printing',
+  'out_for_delivery',
+  'delivered',
+  'cancelled',
+]
 const LIMIT = 25
 
+type Tab = 'list' | 'assignment'
+
 export default function OrdersPage() {
+  const [user, setUser] = useState<AdminUser | null>(null)
+  const [tab, setTab] = useState<Tab>('list')
+
+  useEffect(() => { setUser(getCurrentUser()) }, [])
+  const isSuperAdmin = user?.role === 'super_admin'
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Orders</h1>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b">
+        <TabButton active={tab === 'list'} onClick={() => setTab('list')}>Orders</TabButton>
+        {isSuperAdmin && (
+          <TabButton active={tab === 'assignment'} onClick={() => setTab('assignment')}>Assignment</TabButton>
+        )}
+      </div>
+
+      {tab === 'list' ? <OrdersList /> : isSuperAdmin && <OrderAssignmentConfigForm />}
+    </div>
+  )
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        '-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors',
+        active
+          ? 'border-primary text-foreground'
+          : 'border-transparent text-muted-foreground hover:text-foreground',
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function OrdersList() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -73,9 +132,8 @@ export default function OrdersPage() {
   const pageCount = Math.max(1, Math.ceil(total / LIMIT))
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Orders</h1>
+    <div className="space-y-4">
+      <div className="flex items-center justify-end">
         <RefreshButton onRefresh={refresh} lastRefreshed={lastRefreshed} refreshing={refreshing} />
       </div>
 
@@ -84,7 +142,7 @@ export default function OrdersPage() {
         onChange={setSearch}
         total={total}
         filtered={total}
-        placeholder="Search orders…"
+        placeholder="Search by order ID…"
       />
 
       {loading ? (
@@ -98,6 +156,7 @@ export default function OrdersPage() {
                   <TableHead>Order ID</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Assignment</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead className="text-right">Update Status</TableHead>
                 </TableRow>
@@ -106,12 +165,17 @@ export default function OrdersPage() {
                 {orders.map((o) => (
                   <TableRow key={o.id}>
                     <TableCell className="font-mono text-xs">{o.id.slice(0, 8)}…</TableCell>
-                    <TableCell>₹{o.total_amount?.toLocaleString()}</TableCell>
+                    <TableCell>₹{o.total?.toLocaleString()}</TableCell>
                     <TableCell><Badge variant="secondary">{o.status}</Badge></TableCell>
+                    <TableCell>
+                      {o.assignment_type
+                        ? <Badge variant="outline">{o.assignment_type}</Badge>
+                        : <span className="text-xs text-muted-foreground">—</span>}
+                    </TableCell>
                     <TableCell>{new Date(o.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
                       <Select defaultValue={o.status} onValueChange={(v) => v && handleStatusChange(o.id, v)}>
-                        <SelectTrigger className="w-36 h-8">
+                        <SelectTrigger className="w-44 h-8">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -125,7 +189,7 @@ export default function OrdersPage() {
                 ))}
                 {orders.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                       {search ? 'No orders match your search' : 'No orders found'}
                     </TableCell>
                   </TableRow>
