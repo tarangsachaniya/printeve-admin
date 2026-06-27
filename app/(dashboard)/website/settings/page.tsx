@@ -20,6 +20,10 @@ const FIELDS = [
   { key: 'social_instagram', label: 'Instagram URL' },
   { key: 'social_twitter', label: 'Twitter / X URL' },
   { key: 'social_linkedin', label: 'LinkedIn URL' },
+  { key: 'empty_cart_title', label: 'Empty Cart — Heading' },
+  { key: 'empty_cart_subtitle', label: 'Empty Cart — Message', textarea: true },
+  { key: 'empty_orders_title', label: 'Empty Orders — Heading' },
+  { key: 'empty_orders_subtitle', label: 'Empty Orders — Message', textarea: true },
 ]
 
 export default function SiteSettingsPage() {
